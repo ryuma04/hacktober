@@ -103,6 +103,13 @@ export function DependencyTable({
                           <span className="text-[#5A5870]">→ {dep.latest_version}</span>
                         )}
                       </div>
+                    ) : dep.declared.length > 0 ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[#5A5870] italic">unpinned</span>
+                        {dep.latest_version && (
+                          <span className="text-[#5A5870]">→ {dep.latest_version}</span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-[#5A5870] italic">undeclared</span>
                     )}

@@ -1,0 +1,1138 @@
+{
+  "$defs": {
+    "Alt": {
+      "properties": {
+        "package": {
+          "title": "Package",
+          "type": "string"
+        },
+        "reason_rejected": {
+          "title": "Reason Rejected",
+          "type": "string"
+        }
+      },
+      "required": [
+        "package",
+        "reason_rejected"
+      ],
+      "title": "Alt",
+      "type": "object"
+    },
+    "Concern": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "provenance": {
+          "enum": [
+            "ai",
+            "derived"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "provenance"
+      ],
+      "title": "Concern",
+      "type": "object"
+    },
+    "Declaration": {
+      "properties": {
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "line": {
+          "title": "Line",
+          "type": "integer"
+        },
+        "spec": {
+          "title": "Spec",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "line",
+        "spec"
+      ],
+      "title": "Declaration",
+      "type": "object"
+    },
+    "Dependency": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "import_names": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Import Names",
+          "type": "array"
+        },
+        "declared": {
+          "items": {
+            "$ref": "#/$defs/Declaration"
+          },
+          "title": "Declared",
+          "type": "array"
+        },
+        "pinned_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pinned Version"
+        },
+        "latest_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latest Version"
+        },
+        "latest_release_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latest Release Date"
+        },
+        "last_release_of_pinned": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Release Of Pinned"
+        },
+        "requires_python": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requires Python"
+        },
+        "homepage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Homepage"
+        },
+        "risk": {
+          "$ref": "#/$defs/Risk"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        },
+        "replacement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Replacement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "migration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Migration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "suggested_tests": {
+          "items": {
+            "$ref": "#/$defs/SuggestedTest"
+          },
+          "title": "Suggested Tests",
+          "type": "array"
+        },
+        "test_results": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TestResults"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "compatibility_gaps": {
+          "items": {
+            "$ref": "#/$defs/Gap"
+          },
+          "title": "Compatibility Gaps",
+          "type": "array"
+        },
+        "open_concerns": {
+          "items": {
+            "$ref": "#/$defs/Concern"
+          },
+          "title": "Open Concerns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "import_names",
+        "declared",
+        "risk",
+        "usage",
+        "suggested_tests",
+        "compatibility_gaps",
+        "open_concerns"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
+    "Evidence": {
+      "properties": {
+        "source": {
+          "enum": [
+            "pypi",
+            "osv",
+            "ast",
+            "manifest",
+            "sandbox",
+            "knowledge"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "Gap": {
+      "properties": {
+        "test_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Test Id"
+        },
+        "baseline": {
+          "title": "Baseline",
+          "type": "string"
+        },
+        "migrated": {
+          "title": "Migrated",
+          "type": "string"
+        },
+        "change": {
+          "enum": [
+            "fixed",
+            "regressed",
+            "still_failing",
+            "install_regressed",
+            "install_fixed"
+          ],
+          "title": "Change",
+          "type": "string"
+        },
+        "dependencies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "explanation": {
+          "title": "Explanation",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "none"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "provenance": {
+          "enum": [
+            "ai",
+            "derived"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        }
+      },
+      "required": [
+        "test_id",
+        "baseline",
+        "migrated",
+        "change",
+        "dependencies",
+        "explanation",
+        "severity",
+        "provenance"
+      ],
+      "title": "Gap",
+      "type": "object"
+    },
+    "Indicator": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "none"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "evidence",
+            "derived"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "detail",
+        "evidence",
+        "provenance"
+      ],
+      "title": "Indicator",
+      "type": "object"
+    },
+    "Migration": {
+      "properties": {
+        "steps": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "files_changed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files Changed",
+          "type": "array"
+        },
+        "applied": {
+          "title": "Applied",
+          "type": "boolean"
+        },
+        "not_applied_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Applied Reason"
+        },
+        "provenance": {
+          "enum": [
+            "ai",
+            "derived"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "steps",
+        "files_changed",
+        "applied",
+        "provenance"
+      ],
+      "title": "Migration",
+      "type": "object"
+    },
+    "Replacement": {
+      "properties": {
+        "strategy": {
+          "enum": [
+            "replace",
+            "upgrade",
+            "remove",
+            "stdlib",
+            "declare",
+            "keep"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Package"
+        },
+        "version_spec": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Spec"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "alternatives": {
+          "items": {
+            "$ref": "#/$defs/Alt"
+          },
+          "title": "Alternatives",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "ai",
+            "derived"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "rationale",
+        "confidence",
+        "alternatives",
+        "provenance"
+      ],
+      "title": "Replacement",
+      "type": "object"
+    },
+    "Risk": {
+      "properties": {
+        "level": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "none"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Score",
+          "type": "integer"
+        },
+        "indicators": {
+          "items": {
+            "$ref": "#/$defs/Indicator"
+          },
+          "title": "Indicators",
+          "type": "array"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "rationale_provenance": {
+          "enum": [
+            "ai",
+            "derived"
+          ],
+          "title": "Rationale Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "score",
+        "indicators",
+        "rationale",
+        "rationale_provenance"
+      ],
+      "title": "Risk",
+      "type": "object"
+    },
+    "Run": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "baseline",
+            "migrated",
+            "isolated",
+            "repair"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "dependency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dependency"
+        },
+        "image": {
+          "title": "Image",
+          "type": "string"
+        },
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Command",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "tests_failed",
+            "install_failed",
+            "timeout",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "install_exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Install Exit Code"
+        },
+        "test_exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Test Exit Code"
+        },
+        "duration_s": {
+          "title": "Duration S",
+          "type": "number"
+        },
+        "totals": {
+          "$ref": "#/$defs/Totals"
+        },
+        "tests": {
+          "items": {
+            "$ref": "#/$defs/TestCase"
+          },
+          "title": "Tests",
+          "type": "array"
+        },
+        "log_urls": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Log Urls",
+          "type": "object"
+        },
+        "junit_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Junit Url"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "image",
+        "command",
+        "status",
+        "duration_s",
+        "totals",
+        "tests",
+        "log_urls"
+      ],
+      "title": "Run",
+      "type": "object"
+    },
+    "RunSummary": {
+      "properties": {
+        "passed": {
+          "title": "Passed",
+          "type": "integer"
+        },
+        "failed": {
+          "title": "Failed",
+          "type": "integer"
+        },
+        "errors": {
+          "title": "Errors",
+          "type": "integer"
+        },
+        "skipped": {
+          "title": "Skipped",
+          "type": "integer"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "passed",
+        "failed",
+        "errors",
+        "skipped",
+        "total",
+        "status"
+      ],
+      "title": "RunSummary",
+      "type": "object"
+    },
+    "SuggestedTest": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "provenance": {
+          "const": "ai",
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "purpose",
+        "provenance"
+      ],
+      "title": "SuggestedTest",
+      "type": "object"
+    },
+    "Summary": {
+      "properties": {
+        "dependencies_total": {
+          "title": "Dependencies Total",
+          "type": "integer"
+        },
+        "at_risk": {
+          "title": "At Risk",
+          "type": "integer"
+        },
+        "by_level": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "By Level",
+          "type": "object"
+        },
+        "baseline": {
+          "$ref": "#/$defs/RunSummary"
+        },
+        "migrated": {
+          "$ref": "#/$defs/RunSummary"
+        },
+        "gaps": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Gaps",
+          "type": "object"
+        },
+        "verdict": {
+          "enum": [
+            "safe_to_migrate",
+            "migrate_with_care",
+            "blocked"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        },
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dependencies_total",
+        "at_risk",
+        "by_level",
+        "baseline",
+        "migrated",
+        "gaps",
+        "verdict",
+        "headline"
+      ],
+      "title": "Summary",
+      "type": "object"
+    },
+    "TestCase": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "passed",
+            "failed",
+            "error",
+            "skipped"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "duration_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration S"
+        }
+      },
+      "required": [
+        "id",
+        "outcome"
+      ],
+      "title": "TestCase",
+      "type": "object"
+    },
+    "TestResults": {
+      "properties": {
+        "run_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Run Ids",
+          "type": "array"
+        },
+        "affected_tests": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Tests",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "mixed",
+            "not_run"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_ids",
+        "affected_tests",
+        "status"
+      ],
+      "title": "TestResults",
+      "type": "object"
+    },
+    "Totals": {
+      "properties": {
+        "passed": {
+          "title": "Passed",
+          "type": "integer"
+        },
+        "failed": {
+          "title": "Failed",
+          "type": "integer"
+        },
+        "errors": {
+          "title": "Errors",
+          "type": "integer"
+        },
+        "skipped": {
+          "title": "Skipped",
+          "type": "integer"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "passed",
+        "failed",
+        "errors",
+        "skipped",
+        "total"
+      ],
+      "title": "Totals",
+      "type": "object"
+    },
+    "Usage": {
+      "properties": {
+        "locations": {
+          "items": {
+            "$ref": "#/$defs/UsageLocation"
+          },
+          "title": "Locations",
+          "type": "array"
+        },
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "summary_provenance": {
+          "enum": [
+            "ai",
+            "derived"
+          ],
+          "title": "Summary Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "locations",
+        "files",
+        "summary",
+        "summary_provenance"
+      ],
+      "title": "Usage",
+      "type": "object"
+    },
+    "UsageLocation": {
+      "properties": {
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "line": {
+          "title": "Line",
+          "type": "integer"
+        },
+        "col": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Col"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "import",
+            "from_import",
+            "call",
+            "attribute",
+            "private_api",
+            "monkeypatch",
+            "subclass",
+            "decorator"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "symbol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Symbol"
+        }
+      },
+      "required": [
+        "file",
+        "line",
+        "code",
+        "kind"
+      ],
+      "title": "UsageLocation",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "capsule_id": {
+      "title": "Capsule Id",
+      "type": "string"
+    },
+    "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+    },
+    "tool": {
+      "title": "Tool",
+      "type": "object"
+    },
+    "target": {
+      "title": "Target",
+      "type": "object"
+    },
+    "ai": {
+      "title": "Ai",
+      "type": "object"
+    },
+    "summary": {
+      "$ref": "#/$defs/Summary"
+    },
+    "dependencies": {
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "runs": {
+      "items": {
+        "$ref": "#/$defs/Run"
+      },
+      "title": "Runs",
+      "type": "array"
+    },
+    "patch": {
+      "title": "Patch",
+      "type": "object"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Limitations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "capsule_id",
+    "generated_at",
+    "tool",
+    "target",
+    "ai",
+    "summary",
+    "dependencies",
+    "runs",
+    "patch",
+    "limitations"
+  ],
+  "title": "Capsule",
+  "type": "object"
+}

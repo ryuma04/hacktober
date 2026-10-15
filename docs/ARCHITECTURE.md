@@ -32,16 +32,15 @@ No Postgres, no Redis. State = in-memory map in Go, mirrored to `data/<job_id>/j
 ## 2. Repository layout (hacktober)
 ```
 hacktober/
-├── backend/                     # Go 1.22+ (Lane A)
-│   ├── go.mod                   # module depexit; deps: github.com/go-chi/chi/v5 only
-│   ├── cmd/server/main.go       # config, router, CORS, start
-│   └── internal/
-│       ├── api/handlers.go      # REST + SSE handlers
-│       ├── jobs/store.go        # Job struct, in-memory map, persist job.json
-│       ├── jobs/pipeline.go     # stage orchestration
-│       ├── jobs/events.go       # per-job pub/sub for SSE (+ replay buffer)
-│       ├── aiclient/client.go   # typed calls to FastAPI
-│       └── sandbox/docker.go    # docker run wrapper (install + test)
+├── backend/                     # Go 1.22+ (Lane A) — single package, standard library only (net/http patterns)
+│   ├── go.mod                   # module depexit; no third-party deps
+│   ├── main.go                  # wiring, image pre-pull, start
+│   ├── config.go                # env + repo-root .env
+│   ├── api.go                   # REST + SSE handlers, CORS
+│   ├── store.go                 # Job/Stage/Event, in-memory map, job.json + events.ndjson (replay)
+│   ├── pipeline.go              # stage orchestration
+│   ├── aiclient.go              # calls to FastAPI
+│   └── sandbox.go               # docker run wrapper (install + offline test)
 ├── ai/                          # Python 3.12 FastAPI (Lane A)
 │   ├── requirements.txt         # fastapi uvicorn httpx pydantic>=2 packaging jsonschema
 │   ├── app/main.py              # routes
@@ -123,8 +122,9 @@ SANDBOX_IMAGE=python:3.12-slim
 SANDBOX_TIMEOUT_S=300
 DEFAULT_REPO_URL=https://github.com/rishrek/LinkWatch
 # AI service
-GEMINI_API_KEY=            # Google AI Studio key
-GEMMA_MODEL=               # e.g. the gemma-4-* id listed by the models endpoint
+GEMINI_API_KEYS=           # comma-separated Google AI Studio keys; next key used automatically on quota/auth errors
+GEMMA_MODELS=gemma-4-26b-a4b-it,gemma-4-31b-it   # tried in order when a model is overloaded
+XAI_API_KEYS=              # optional last-resort fallback (xAI Grok), only when every Gemma key/model fails
 GEMMA_TIMEOUT_S=90
 GEMMA_MAX_CONCURRENCY=3
 OSV_URL=https://api.osv.dev/v1/query
@@ -138,7 +138,8 @@ PYPI_URL=https://pypi.org/pypi
 | No DB/queue | 3-hour budget; JSON files are the evidence trail anyway. |
 | Docker CLI, not SDK | ~150 LOC, no heavy deps, easy to debug by copy-pasting the command (logged in `result.json.command`). |
 | Gemma returns **full file content**, not diffs | LLM diffs are frequently malformed; LinkWatch files are small. Diff is computed by `difflib`. |
-| Edits validated before use | `py_compile` each edited file; reject edits touching files outside repo or non-.py/manifest files. |
+| Edits validated before use | `compile()` each edited file; reject edits that add unexpected imports or change size > 2x; test files are never edited. |
+| Baseline runs on a copy | `runs/baseline/repo` so pytest side effects never leak into the migrated workspace. |
 | Deterministic score + AI rationale | Scores are reproducible; AI explains, does not invent risk. |
 | Provenance on every field | Judges can see what is evidence vs model opinion. |
 | Install + test split, test offline | Tests prove behaviour of code, not network luck. |

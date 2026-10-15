@@ -1,0 +1,7 @@
+[project]
+name = "minipkg"
+version = "0.1.0"
+dependencies = [
+    "oldlib>=2",
+    "helperlib",
+]

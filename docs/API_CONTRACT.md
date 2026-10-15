@@ -27,6 +27,7 @@ Codes: `bad_request` (400), `not_found` (404), `conflict` (409, e.g. capsule not
 | GET | `/api/analyses/{id}/patch.diff` | unified diff (`text/x-diff`) |
 | GET | `/api/analyses/{id}/runs/{run_id}/log?stream=install\|test` | raw log (`text/plain`) |
 | GET | `/api/analyses/{id}/runs/{run_id}/junit` | raw JUnit XML |
+| GET | `/api/analyses/{id}/migrated/{path}` | one file from the migrated workspace (`text/plain`; used by the VS Code quick fix) |
 | GET | `/api/analyses/{id}/bundle.zip` | *(stretch)* whole capsule folder |
 
 ### 2.1 `GET /api/health` → 200

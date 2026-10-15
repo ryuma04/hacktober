@@ -1,0 +1,13 @@
+data/
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+node_modules/
+.next/
+dist/
+out/
+*.exe
+backend/bin/
+*.vsix
