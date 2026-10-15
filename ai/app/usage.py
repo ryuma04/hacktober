@@ -182,15 +182,6 @@ async def run(repo: Path, scan: dict, py: str, log: gemma.CallLog) -> dict:
                 merged[f["code"]] = {**f, "evidence": list(f["evidence"])}
         extra[dep] = list(merged.values())
 
-    used = [{"name": n, "locations": [f"{l['file']}:{l['line']} [{l['kind']}] {l['code']}" for l in u["locations"][:25]]}
-            for n, u in usage.items() if u["locations"]]
-    if used:
-        reply = await gemma.complete_json(log, "usage_summary", prompts.usage_summary(py, used), prompts.ItemsReply,
-                                         deadline_s=90)
-        texts = {i.name.lower(): i.text for i in reply.items} if reply else {}
-        for n, u in usage.items():
-            if texts.get(n.lower()):
-                u["summary"], u["summary_provenance"] = texts[n.lower()], "ai"
     for n, u in usage.items():
         if not u["summary"]:
             u["summary"] = (f"Used in {len(u['files'])} file(s): {', '.join(u['files'][:4])}."

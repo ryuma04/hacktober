@@ -90,7 +90,12 @@ func (p *Pipeline) forwardAICalls(id, stage string, out map[string]any) {
 		m["stage"] = stage
 		p.store.Emit(id, "ai_call", m)
 		if ok, _ := m["ok"].(bool); !ok {
-			p.logf(id, stage, "warn", "Gemma call '%v' failed: %v", m["purpose"], m["error"])
+			errText := fmt.Sprint(m["error"])
+			level := "warn"
+			if strings.Contains(errText, "EXHAUSTED") {
+				level = "error" // surfaced prominently: the operator must add API keys
+			}
+			p.logf(id, stage, level, "Gemma call '%v' failed: %v", m["purpose"], errText)
 		}
 	}
 }

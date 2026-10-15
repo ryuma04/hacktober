@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -41,6 +42,7 @@ class _KeyState:
     cooldown_until: float = 0.0
     dead: bool = False
     reason: str = ""
+    strikes: int = 0  # consecutive 429s; a key that keeps failing right after cooling down is out for the day
 
 
 class KeyPool:
@@ -74,12 +76,28 @@ class KeyPool:
                 return k
         return None
 
-    def cooldown(self, key: str, seconds: float, reason: str) -> None:
+    def rate_limited(self, key: str, reason: str) -> None:
+        """HTTP 429. Google uses the same message for per-minute and daily quotas, so escalate on repeats:
+        60 s cool-downs first, and after DAILY_STRIKES consecutive 429s treat the key as out for the day."""
         with self._lock:
             st = self._state.setdefault(key, _KeyState())
+            st.strikes += 1
+            daily = st.strikes >= DAILY_STRIKES
+            seconds = 6 * 3600 if daily else 60
             st.cooldown_until = time.time() + seconds
-            st.reason = reason
-        log.warning("key …%s cooled down %ss: %s", key[-6:], int(seconds), reason)
+            st.reason = ("daily quota likely exhausted: " if daily else "per-minute rate limit: ") + reason
+        log.warning("key …%s cooled down %ss (strike %s): %s", key[-4:], int(seconds), st.strikes, reason)
+
+    def succeeded(self, key: str) -> None:
+        with self._lock:
+            self._state.setdefault(key, _KeyState()).strikes = 0
+
+    def soonest_available(self) -> float | None:
+        """Seconds until some key leaves a short cool-down; None if every key is retired or out for the day."""
+        now = time.time()
+        waits = [max(0.0, st.cooldown_until - now) for k in self.configured()
+                 for st in [self._state.get(k, _KeyState())] if not st.dead and st.strikes < DAILY_STRIKES]
+        return min(waits) if waits else None
 
     def retire(self, key: str, reason: str) -> None:
         with self._lock:
@@ -92,11 +110,19 @@ class KeyPool:
         now = time.time()
         usable = [k for k in keys if not self._state.get(k, _KeyState()).dead
                   and self._state.get(k, _KeyState()).cooldown_until <= now]
+        detail = []
+        for k in keys:
+            st = self._state.get(k, _KeyState())
+            state = "retired" if st.dead else ("cooling_down" if st.cooldown_until > now else "ok")
+            detail.append({"key": "…" + k[-4:], "state": state, "reason": st.reason[:120] if state != "ok" else ""})
         return {"configured": len(keys), "usable": len(usable),
-                "retired": sum(1 for k in keys if self._state.get(k, _KeyState()).dead)}
+                "retired": sum(1 for k in keys if self._state.get(k, _KeyState()).dead),
+                "exhausted": bool(keys) and self.soonest_available() is None, "detail": detail}
 
 
+DAILY_STRIKES = 4
 POOL = KeyPool()
+KEYS_EXHAUSTED = "ALL GEMINI API KEYS EXHAUSTED OR REJECTED - add new keys to GEMINI_API_KEYS in .env (picked up without restart)"
 
 
 def models() -> list[str]:
@@ -112,10 +138,10 @@ class CallLog:
     _n: int = 0
 
     def record(self, purpose: str, model: str, latency_ms: int, ok: bool, prompt: str, reply: str,
-               error: str | None = None, attempts: int = 1) -> dict:
+               error: str | None = None, attempts: int = 1, cached: bool = False) -> dict:
         self._n += 1
         rec = {"purpose": purpose, "model": model, "latency_ms": latency_ms, "ok": ok, "attempts": attempts,
-               "prompt_chars": len(prompt), "output_chars": len(reply)}
+               "prompt_chars": len(prompt), "output_chars": len(reply), "cached": cached}
         if error:
             rec["error"] = error[:300]
         self.calls.append(rec)
@@ -175,16 +201,33 @@ async def generate(prompt: str, temperature: float = 0.2, max_tokens: int = 8192
     async def try_model(model: str) -> tuple[str, str]:
         """Rotate keys for one model; return (text, model) or raise GemmaUnavailable."""
         tried_keys: set[str] = set()
+        overload_retries = [3, 8]  # Google returns 500/503 "high demand" in bursts; brief backoff usually clears it
         while True:
             key = POOL.next_key(tried_keys)
             if key is None:
+                wait = POOL.soonest_available()
+                if wait is None:
+                    stats["last_err"] = KEYS_EXHAUSTED
+                    log.error(KEYS_EXHAUSTED + " %s", POOL.status())
+                    raise GemmaUnavailable(stats["last_err"])
+                if POOL.next_key(set()) is None:  # every key is briefly rate-limited: wait, the deadline still applies
+                    await asyncio.sleep(min(wait, 65) + 0.5)
+                    tried_keys.clear()
+                    continue
                 raise GemmaUnavailable(stats["last_err"])
             tried_keys.add(key)
             stats["attempts"] += 1
             try:
                 r = await _http().post(API.format(model=model), json=body, headers={"x-goog-api-key": key})
+            except httpx.ReadTimeout:
+                stats["last_err"] = f"{model}: read timeout"
+                raise GemmaUnavailable(stats["last_err"])
             except httpx.HTTPError as e:
                 stats["last_err"] = f"{model}: {type(e).__name__}"
+                if overload_retries:
+                    await asyncio.sleep(overload_retries.pop(0))
+                    tried_keys.discard(key)
+                    continue
                 raise GemmaUnavailable(stats["last_err"])
             if r.status_code == 200:
                 data = r.json()
@@ -192,34 +235,46 @@ async def generate(prompt: str, temperature: float = 0.2, max_tokens: int = 8192
                 parts = (cands[0].get("content") or {}).get("parts", []) if cands else []
                 text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
                 if text.strip():
+                    POOL.succeeded(key)
                     return text, model
                 stats["last_err"] = f"{model}: empty reply ({cands[0].get('finishReason') if cands else 'no candidates'})"
                 continue  # transient: retry the same model on the next key
             msg = _err_msg(r)
             stats["last_err"] = f"{model}: HTTP {r.status_code} {msg}"
             if r.status_code == 429:
-                daily = "day" in msg.lower() or "PerDay" in msg
-                POOL.cooldown(key, 3600 * 6 if daily else 60, msg)
+                POOL.rate_limited(key, msg)
                 continue  # same model, next key
             if r.status_code in (401, 403) or (r.status_code == 400 and "key" in msg.lower()):
                 POOL.retire(key, msg)
                 continue
-            raise GemmaUnavailable(stats["last_err"])  # 404 / overloaded 5xx / bad request: give up on this model
+            if r.status_code in (500, 502, 503, 504) and overload_retries:
+                await asyncio.sleep(overload_retries.pop(0))
+                tried_keys.discard(key)  # the key is fine; the model was busy
+                continue
+            raise GemmaUnavailable(stats["last_err"])  # 404 / persistent overload / bad request: give up on this model
 
     if True:  # concurrency is limited by the caller (complete_json / health)
         for round_ in range(2):
             # Hedged request: all models race (each on its own key); the first valid reply wins, the rest are cancelled.
-            tasks = [asyncio.create_task(try_model(m)) for m in models()]
+            ms = models()
+            tasks = [asyncio.create_task(try_model(ms[0]))]
             try:
-                for fut in asyncio.as_completed(tasks):
+                hedge_after = float(config.get("GEMMA_HEDGE_AFTER_S", "30"))
+                done, _ = await asyncio.wait(tasks, timeout=hedge_after)
+                if done and not tasks[0].exception():
+                    text, model = tasks[0].result()
+                    return text, model, stats["attempts"]
+                # primary slow or failed: race the other models too (bounded extra load on the keys)
+                tasks += [asyncio.create_task(try_model(m)) for m in ms[1:]]
+                for fut in asyncio.as_completed([x for x in tasks if not (x.done() and x.exception())]):
                     try:
                         text, model = await fut
                         return text, model, stats["attempts"]
                     except GemmaUnavailable:
                         continue
             finally:
-                for t in tasks:
-                    t.cancel()
+                for task in tasks:
+                    task.cancel()
             if not POOL.next_key(set()):
                 break
             await asyncio.sleep(3)
@@ -254,7 +309,7 @@ async def _grok(prompt: str, temperature: float, max_tokens: int) -> tuple[str, 
             return (text, f"xai:{model}") if text.strip() else None
         msg = _err_msg(r) or r.text[:200]
         if r.status_code == 429:
-            XAI_POOL.cooldown(key, 60, msg)
+            XAI_POOL.rate_limited(key, msg)
         else:
             XAI_POOL.retire(key, msg)  # credits exhausted / invalid key
     return None
@@ -304,37 +359,60 @@ def extract_json(text: str):
 async def complete_json(log_: CallLog, purpose: str, prompt: str, schema: type[T],
                         max_tokens: int = 8192, deadline_s: float = 180) -> T | None:
     """Ask Gemma for JSON matching `schema` within `deadline_s` (total, including one repair retry).
-    Returns None (and logs a failed call) if Gemma is unavailable or too slow; callers fall back deterministically."""
+    Returns None (and logs a failed call) if Gemma is unavailable or too slow; callers fall back deterministically.
+
+    Valid answers are cached by (prompt, schema): re-analysing the same code with the same facts reuses Gemma's
+    earlier answer instead of re-generating it. Cached calls are logged with cached=true and disclosed in the capsule.
+    Set GEMMA_CACHE=0 to disable."""
+    key = hashlib.sha256(f"{schema.__name__}\n{prompt}".encode("utf-8")).hexdigest()
+    cache_file = config.data_dir() / "_cache" / "gemma" / f"{key}.json"
+    if config.get("GEMMA_CACHE", "1") != "0" and cache_file.exists():
+        try:
+            entry = json.loads(cache_file.read_text(encoding="utf-8"))
+            obj = schema.model_validate(extract_json(entry["text"]))
+            log_.record(purpose, entry["model"], 0, True, prompt, entry["text"], cached=True)
+            return obj
+        except (OSError, ValueError, ValidationError, KeyError):
+            pass  # unreadable or stale entry: ask Gemma again
     async with _semaphore():
-        return await _complete_json(log_, purpose, prompt, schema, max_tokens, deadline_s)
+        result, text, model = await _complete_json(log_, purpose, prompt, schema, max_tokens, deadline_s)
+    if result is not None:
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps({"model": model, "text": text,
+                                              "purpose": purpose, "created": time.strftime("%Y-%m-%dT%H:%M:%S")}),
+                                  encoding="utf-8")
+        except OSError:
+            pass
+    return result
 
 
 async def _complete_json(log_: CallLog, purpose: str, prompt: str, schema: type[T], max_tokens: int,
-                         deadline_s: float) -> T | None:
+                         deadline_s: float) -> tuple[T | None, str, str]:
     current = prompt
     t_start = time.time()
     for attempt in range(2):
         t0 = time.time()
         remaining = deadline_s - (t0 - t_start)
         if remaining < 15:
-            return None
+            return None, "", ""
         try:
             text, model, n = await asyncio.wait_for(generate(current, max_tokens=max_tokens), timeout=remaining)
         except asyncio.TimeoutError:
             log_.record(purpose, ",".join(models()), int((time.time() - t0) * 1000), False, current, "",
                         f"timed out after {int(remaining)}s (deterministic fallback used)")
-            return None
+            return None, "", ""
         except GemmaUnavailable as e:
             log_.record(purpose, ",".join(models()), int((time.time() - t0) * 1000), False, current, "", str(e))
-            return None
+            return None, "", ""
         try:
             obj = schema.model_validate(extract_json(text))
             log_.record(purpose, model, int((time.time() - t0) * 1000), True, current, text, attempts=n)
-            return obj
+            return obj, text, model
         except (ValueError, ValidationError) as e:
             err = str(e)[:600]
             log_.record(purpose, model, int((time.time() - t0) * 1000), False, current, text,
                         f"invalid JSON: {err}", attempts=n)
             current = (prompt + f"\n\nYour previous reply was invalid: {err}\n"
                        "Reply with ONLY the corrected JSON object, nothing else.")
-    return None
+    return None, "", ""

@@ -32,14 +32,14 @@ def _prefix(base: str, u: str | None) -> str | None:
     return u
 
 
-def _calls(job_dir: Path) -> tuple[int, int, str]:
+def _calls(job_dir: Path) -> tuple[int, int, str, int]:
     p = job_dir / "ai_calls.jsonl"
     if not p.exists():
-        return 0, 0, ""
+        return 0, 0, "", 0
     recs = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
     ok_models = [r["model"] for r in recs if r.get("ok")]
     model = max(set(ok_models), key=ok_models.count) if ok_models else ""
-    return len(recs), sum(1 for r in recs if not r.get("ok")), model
+    return len(recs), sum(1 for r in recs if not r.get("ok")), model, sum(1 for r in recs if r.get("cached"))
 
 
 def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
@@ -81,6 +81,11 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
                 "fail" if outs and all(o != "passed" for o in outs) else "mixed" if outs else "not_run"
         elif runs:
             status = "pass" if not dep_gaps else "mixed"
+        if p and p.get("provenance") == "ai":  # summaries written by Gemma inside the same decide call
+            if p.get("risk_summary"):
+                d["risk"]["rationale"], d["risk"]["rationale_provenance"] = p["risk_summary"], "ai"
+            if p.get("usage_summary") and d["usage"]["locations"]:
+                d["usage"]["summary"], d["usage"]["summary_provenance"] = p["usage_summary"], "ai"
         concerns = [{"text": c, "provenance": p.get("provenance", "ai")} for c in (p or {}).get("open_concerns", [])]
         if a and not a["applied"]:
             concerns.insert(0, {"text": f"Code migration not applied: {a['not_applied_reason']}", "provenance": "derived"})
@@ -131,7 +136,7 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
         f"{at_risk} of {len(out_deps)} dependencies are at risk; tests passing {base['passed']}/{base['total']} "
         f"before and {mig['passed']}/{mig['total']} after migration.")
 
-    n_calls, n_failed, model = _calls(job_dir)
+    n_calls, n_failed, model, n_cached = _calls(job_dir)
     for stage, err in (stage_errors or {}).items():
         limitations.append(f"Stage '{stage}' failed: {err}")
     if not gemma.configured() or (n_calls and n_failed == n_calls):
@@ -139,9 +144,15 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
     elif n_failed:
         limitations.append(f"{n_failed} of {n_calls} Gemma 4 calls failed or returned invalid output; those fields "
                            "use deterministic fallbacks (marked 'derived').")
+    if n_cached:
+        limitations.append(f"{n_cached} of {n_calls} Gemma 4 answers were reused from an earlier analysis of the same "
+                           "code and facts (identical prompt); the raw answers are in ai/ and marked cached in "
+                           "ai_calls.jsonl. Set GEMMA_CACHE=0 to force fresh answers.")
     for f in mat.get("files", []):
         if f["status"] == "rejected":
             limitations.append(f"Gemma's rewrite of {f['path']} was rejected ({f['reason']}); original file kept.")
+        elif f["status"] == "reverted":
+            limitations.append(f"Rewrite of {f['path']} was {f['reason']}.")
     if not any(r["tests"] for r in runs):
         limitations.append("No test results were collected; compatibility could not be verified by execution.")
     limitations += [n for n in scan.get("notes", []) if "not parsed" in n or "not analysed" in n]
@@ -154,7 +165,7 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
         "tool": {"name": "DepExit", "version": config.TOOL_VERSION},
         "target": {**target, "manifests": scan.get("manifests", [])},
         "ai": {"provider": "Google AI Studio (Gemini API)", "model": model or ",".join(gemma.models()),
-               "calls": n_calls, "failed_calls": n_failed,
+               "calls": n_calls, "failed_calls": n_failed, "cached_calls": n_cached,
                "fallback_used": n_failed > 0 or not gemma.configured(), "terms_url": config.GEMMA_TERMS_URL},
         "summary": {"dependencies_total": len(out_deps), "at_risk": at_risk, "by_level": by_level,
                     "baseline": base, "migrated": mig, "gaps": gap_counts, "verdict": verdict, "headline": headline},

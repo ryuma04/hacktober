@@ -20,7 +20,7 @@ Req `{ "job_dir": str, "repo_dir": "…/repo", "python_version": "3.12" }`
 4. PyPI `GET {PYPI_URL}/{name}/json` and `/{name}/{pinned}/json` (concurrent, cache in `DATA_DIR/_cache/pypi/`): latest version, release dates, `requires_python`, classifiers, `yanked`, project URLs, `Development Status :: 7 - Inactive`.
 5. OSV `POST {OSV_URL}` `{"package":{"name":n,"ecosystem":"PyPI"},"version":pinned}` → vulns (id, aliases, summary, severity, fixed versions). Unpinned spec → query latest-allowed is unknowable; query only pinned, else note "not checked (unpinned)".
 6. Indicators + score (§3). Python-version incompatibility from metadata only here (`requires_python` excludes 3.12, or pinned release older than 2 years with no 3.1x classifier → weak, severity `low`); strong evidence is added later from the sandbox in `compare`.
-7. **Gemma call `risk_rationale`** (one batched call for all deps with level ≥ low) → `risk.rationale`.
+7. `risk.rationale` is deterministic here; Gemma's `risk_summary` from the per-dependency `decide` call replaces it in the capsule (one call per dependency instead of an extra batched call).
 
 Res (`scan.json`):
 ```json
@@ -42,7 +42,7 @@ AST per file, per dependency import names:
 - Assignment whose target is an attribute of a dep (`requests.Session.request = …`) → `monkeypatch` + **MONKEYPATCH**.
 - Known deprecated APIs from `knowledge.DEPRECATED_APIS` (e.g. module `pkg_resources`, pydantic v1 `validator`/`class Config`) → **DEPRECATED_API_USE** (evidence = location; detail from hint).
 - `code` = stripped source line. Include `tests/` but mark files under tests.
-**Gemma call `usage_summary`** (one batched call): 1–2 sentence summary per dependency from its locations.
+Usage summary is deterministic here; Gemma's `usage_summary` from the `decide` call replaces it in the capsule.
 Res: `{ "usage": { "<dep>": { "locations": [...], "files": [...], "summary": str, "summary_provenance": "ai|derived" } }, "extra_indicators": { "<dep>": [Indicator] }, "ai_calls": [] }`
 (`extra_indicators` are merged and scores recomputed by `capsule`.)
 
@@ -60,7 +60,7 @@ Req `{ "job_dir", "repo_dir", "out_repo_dir": "…/runs/migrated/repo" }`.
 1. Copy `repo_dir` → `out_repo_dir` (excluding `.git`).
 2. **Manifests rewritten deterministically** from decisions: replace/stdlib/remove → drop old line; replace/upgrade/declare → write `package + version_spec`. Apply to every manifest that declared it (requirements*.txt, `[project].dependencies`). Preserve comments/order.
 3. Group affected `.py` files = union of `usage.files` (non-test first; tests only if they import the dep directly) of deps whose strategy ∈ `replace|stdlib|remove|upgrade` *and* whose `steps` imply code changes.
-4. **Gemma call `rewrite_file`** per file (prompt §4.3), concurrently: input = full file, the decisions for every dep used in that file, the relevant usage lines. Output = full new file content + `changes` list.
+4. **Gemma call `rewrite_file`** per file (prompt §4.3), concurrently: input = full file, the decisions for every dep used in that file, the relevant usage lines. Output = minimal search/replace `edits` (each `old` must match exactly once) + `changes`; edits are applied deterministically. After all files: a dependency whose edits did not land in every file keeps its original manifest line and its partial edits are reverted, so code and manifests stay consistent.
 5. Validate each output: non-empty, `compile()` succeeds, no new imports of packages not in the new manifest/stdlib/local, file length within 0.5×–2× original. Fail → keep original file, mark dep migration `applied:false` + `not_applied_reason`.
 6. Unified diff of all changed files (`difflib.unified_diff`, `a/` `b/` paths) → `patch.diff`.
 Res: `{ "files": [{ "path", "status": "applied|rejected|unchanged", "reason?", "deps": [] }], "manifest_changes": [{ "file","before","after" }], "patch": { "files_changed","insertions","deletions" }, "ai_calls": [] }`
@@ -92,6 +92,10 @@ Text = concat of candidates[0].content.parts[*].text, skipping parts with "thoug
 - Retries on 429/5xx: 2 retries, backoff 2 s / 6 s. Semaphore `GEMMA_MAX_CONCURRENCY`.
 - Log every call (purpose, latency, ok, prompt chars, output chars) to `job_dir/ai_calls.jsonl`; store raw prompt/response in `job_dir/ai/<n>_<purpose>.txt` (evidence for judges).
 - Never send secrets: prompts contain only repo code/metadata.
+- **Hedged requests:** each call starts on the first `GEMMA_MODELS` entry; if it has not answered after `GEMMA_HEDGE_AFTER_S` (default 30 s) or fails, the other models race it on other keys and the first valid reply wins. 500/503 get two short backoff retries.
+- **Rate limits:** a 429 cools that key down for 60 s and the next key is used; if every key is briefly limited the call waits for the first one to recover (within its deadline). After 4 consecutive 429s a key is treated as out for the day; only when no key can recover is `ALL GEMINI API KEYS EXHAUSTED…` raised.
+- **Answer cache:** valid replies are cached by sha256(schema + prompt) in `DATA_DIR/_cache/gemma/`; a hit is logged with `cached: true` and counted in `capsule.ai.cached_calls` + limitations. `GEMMA_CACHE=0` disables it.
+- **Key exhaustion:** when no key is usable the error is `ALL GEMINI API KEYS EXHAUSTED…`; Go logs it at `error` level and `/v1/health` reports `keys.exhausted` with per-key state (last 4 chars only).
 
 ## 3. Risk scoring (deterministic, `scan.py`)
 | Indicator | Points | Severity |
@@ -118,8 +122,7 @@ Score = min(100, Σ). Level: ≥70 critical · ≥45 high · ≥20 medium · >0 
 Shared system preamble:
 > You are a senior Python maintainer helping migrate dependencies safely. Use ONLY the facts provided. If information is missing, say so in `open_concerns`; never invent versions, APIs or CVEs. Target runtime: Python {python_version}. Reply with a single JSON object and nothing else.
 
-### 4.1 `risk_rationale` (batched)
-Input: list of `{name, pinned, latest, indicators[code, detail]}`. Output: `{"items":[{"name","rationale"}]}` — ≤ 2 sentences each, reference indicator facts.
+### 4.1 (retired) `risk_rationale` — folded into `decide` as `risk_summary`.
 
 ### 4.2 `decide` (per dependency)
 Input: dependency facts, indicators, all usage locations (`file:line code`), candidate list with PyPI health, Python version, other deps in project.
@@ -133,17 +136,17 @@ Output schema:
   "steps": ["ordered, concrete, file-referencing migration steps"],
   "code_changes_needed": true,
   "suggested_tests": [{"name":"test_…","purpose":"","code":"pytest function"}],
-  "open_concerns": ["behaviour differences, untested paths, risks"] }
+  "open_concerns": ["behaviour differences, untested paths, risks"],
+  "risk_summary": "≤2 sentences why it is risky", "usage_summary": "1 sentence how it is used" }
 ```
 Rules in prompt: prefer the smallest safe change; prefer stdlib when it fully covers the used API; must cover every usage location; suggested tests must be runnable pytest functions using only the project's public API.
 
 ### 4.3 `rewrite_file` (per file)
 Input: path, full original content, decisions for each dep used in the file (strategy, package, version_spec, steps), the usage lines in this file.
-Output: `{ "path": "", "new_content": "<entire file>", "changes": ["line-level summary"] }`
+Output: `{ "path": "", "edits": [{"old": "<exact text>", "new": "<replacement>"}], "changes": ["line-level summary"] }`
 Rules: change only what the migration requires; keep public function names/signatures and behaviour; no new third-party imports except the chosen replacements; keep comments; must be valid Python {python_version}.
 
-### 4.4 `usage_summary` (batched)
-Input: per dep the locations. Output: `{"items":[{"name","summary"}]}`.
+### 4.4 (retired) `usage_summary` — folded into `decide` as `usage_summary`.
 
 ### 4.5 `explain_gaps` (batched)
 Input: gaps (test id, baseline/migrated outcome, error excerpt, suspected deps, relevant diff hunk). Output: `{"headline":"", "items":[{"test_id","explanation","severity":"critical|high|medium|low"}]}` — explanation must say *cause* and *what a maintainer should do*.

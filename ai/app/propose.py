@@ -45,7 +45,9 @@ def _fallback(dep: dict) -> dict:
         strat, pkg, spec = "declare", dep["name"], f">={latest}" if latest else None
     elif "DECLARED_UNUSED" in codes and dep["name"] not in knowledge.TOOL_PACKAGES:
         strat, pkg, spec = "remove", None, None
-    elif latest and dep.get("pinned_version") != latest and "DEPRECATED_PACKAGE" not in codes:
+    elif (latest and dep.get("pinned_version") != latest and "DEPRECATED_PACKAGE" not in codes
+          and not (codes & {"DEPRECATED_API_USE", "PRIVATE_API_USE", "MONKEYPATCH"} and "MAJOR_VERSIONS_BEHIND" in codes)):
+        # without AI review, only upgrade when the code does not lean on APIs a major release may have removed
         major = Version(latest).major
         strat, pkg, spec = "upgrade", dep["name"], f">={latest},<{major + 1}"
     else:

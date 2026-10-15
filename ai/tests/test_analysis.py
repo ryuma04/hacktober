@@ -49,3 +49,29 @@ def test_junit_ids():
     assert _test_id("tests.test_mod", "test_x") == "tests/test_mod.py::test_x"
     assert _test_id("tests.test_mod.TestA", "test_y") == "tests/test_mod.py::TestA::test_y"
     assert _test_id("", "tests.test_mod") == "tests/test_mod.py"
+
+
+def test_apply_edits_exact_once():
+    from app.materialize import apply_edits
+    src = "import oldlib\n\ndef f():\n    return oldlib.load()\n"
+    new, err = apply_edits(src, [("import oldlib", "import newlib"), ("oldlib.load()", "newlib.load()")])
+    assert err is None and "oldlib" not in new
+    assert apply_edits(src, [("missing", "x")])[1] == "edit 1 search text not found in the file"
+    assert "ambiguous" in apply_edits("a\na\n", [("a", "b")])[1]
+
+
+def test_key_pool_escalates_repeated_429_to_daily(monkeypatch):
+    from app import gemma
+    pool = gemma.KeyPool()
+    monkeypatch.setattr(gemma.KeyPool, "configured", staticmethod(lambda: ["k-aaaa", "k-bbbb"]))
+    pool.rate_limited("k-aaaa", "Resource has been exhausted")
+    assert pool.soonest_available() == 0  # the other key is still free
+    pool.rate_limited("k-bbbb", "Resource has been exhausted")
+    assert 0 < pool.soonest_available() <= 60  # both briefly limited: wait, not exhausted
+    assert not pool.status()["exhausted"]
+    for _ in range(gemma.DAILY_STRIKES):
+        pool.rate_limited("k-aaaa", "x")
+        pool.rate_limited("k-bbbb", "x")
+    assert pool.soonest_available() is None and pool.status()["exhausted"]
+    pool.succeeded("k-aaaa")
+    assert pool._state["k-aaaa"].strikes == 0

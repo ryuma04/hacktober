@@ -18,34 +18,6 @@ def _j(obj) -> str:
     return json.dumps(obj, indent=1, ensure_ascii=False)
 
 
-# ---------- risk_rationale ----------
-class _Item(BaseModel):
-    name: str
-    text: str
-
-
-class ItemsReply(BaseModel):
-    items: list[_Item]
-
-
-def risk_rationale(py: str, deps: list[dict]) -> str:
-    return PREAMBLE.format(py=py) + (
-        "For each dependency below, write a rationale of at most 2 sentences explaining WHY it is risky for this "
-        "project, citing the indicator facts (versions, advisories, usage). Do not repeat the package name first.\n"
-        'Reply shape: {"items": [{"name": "<dependency name>", "text": "<rationale>"}]}\n\n'
-        f"DEPENDENCIES:\n{_j(deps)}"
-    )
-
-
-def usage_summary(py: str, deps: list[dict]) -> str:
-    return PREAMBLE.format(py=py) + (
-        "For each dependency below, summarise in 1-2 sentences HOW the project uses it, based only on the code "
-        "locations given (what it is used for, which modules, anything unusual like private APIs or monkeypatching).\n"
-        'Reply shape: {"items": [{"name": "<dependency name>", "text": "<summary>"}]}\n\n'
-        f"DEPENDENCIES AND USAGE LOCATIONS:\n{_j(deps)}"
-    )
-
-
 # ---------- decide ----------
 class Alternative(BaseModel):
     package: str
@@ -69,6 +41,8 @@ class Decision(BaseModel):
     code_changes_needed: bool = False
     suggested_tests: list[SuggestedTest] = []
     open_concerns: list[str] = []
+    risk_summary: str = ""
+    usage_summary: str = ""
 
 
 def decide(py: str, dep: dict, usage: list[str], candidates: list[dict], others: list[str]) -> str:
@@ -86,10 +60,13 @@ def decide(py: str, dep: dict, usage: list[str], candidates: list[dict], others:
         "that could change with this migration.\n"
         "- open_concerns: behaviour differences or risks that the existing tests may not catch.\n"
         "- confidence: 0..1, how sure you are the migration is safe.\n"
+        "- risk_summary: at most 2 sentences on WHY this dependency is risky, citing the indicator facts.\n"
+        "- usage_summary: 1 sentence on HOW the project uses it, from the usage locations.\n"
+        "- Be concise: at most 2 suggested_tests and 3 open_concerns.\n"
         'Reply shape: {"strategy": "...", "package": "...", "version_spec": "...", "rationale": "...", '
         '"confidence": 0.8, "alternatives": [{"package": "...", "reason_rejected": "..."}], "steps": ["..."], '
         '"code_changes_needed": true, "suggested_tests": [{"name": "test_...", "purpose": "...", "code": "def test_...():\\n    ..."}], '
-        '"open_concerns": ["..."]}\n\n'
+        '"open_concerns": ["..."], "risk_summary": "...", "usage_summary": "..."}\n\n'
         f"DEPENDENCY FACTS:\n{_j(dep)}\n\n"
         f"USAGE LOCATIONS (file:line: code):\n" + ("\n".join(usage) or "(not imported anywhere)") + "\n\n"
         f"CANDIDATES (with PyPI health; hints only, you may choose otherwise):\n{_j(candidates)}\n\n"
@@ -97,26 +74,39 @@ def decide(py: str, dep: dict, usage: list[str], candidates: list[dict], others:
     )
 
 
-# ---------- rewrite_file ----------
-class Rewrite(BaseModel):
+# ---------- rewrite_file (minimal edits) ----------
+class Rewrite(BaseModel):  # full-file form, used by the repair prompt
     path: str
     new_content: str
     changes: list[str] = []
 
 
+class Edit(BaseModel):
+    old: str
+    new: str
+
+
+class EditsReply(BaseModel):
+    path: str
+    edits: list[Edit] = []
+    changes: list[str] = []
+
+
 def rewrite_file(py: str, path: str, content: str, decisions: list[dict], usage: list[str]) -> str:
     return PREAMBLE.format(py=py) + (
-        f"Rewrite the file `{path}` to apply the dependency migrations below.\n"
+        f"Apply the dependency migrations below to the file `{path}` as MINIMAL search/replace edits.\n"
         "Rules:\n"
-        "- Change ONLY what the migrations require. Keep every public function/class name, signature and behaviour.\n"
-        "- Keep comments, docstrings and formatting style. Do not add new third-party imports other than the chosen "
-        "replacement packages.\n"
-        "- The result must be valid Python and complete (the ENTIRE file, not a diff).\n"
-        "- If the file needs no change, return it unchanged with changes = [].\n"
-        'Reply shape: {"path": "<path>", "new_content": "<entire new file>", "changes": ["<one line per change>"]}\n\n'
+        "- Each edit's `old` must be copied VERBATIM from the file (same indentation and line breaks) and must occur "
+        "exactly once; include a neighbouring line if needed to make it unique. `new` is the replacement text.\n"
+        "- Change ONLY what the migrations require (imports, API calls, config). Keep every public function/class "
+        "name, signature and behaviour, and keep comments.\n"
+        "- Do not add new third-party imports other than the chosen replacement packages.\n"
+        "- The resulting file must be valid Python. If no change is needed, return \"edits\": [].\n"
+        'Reply shape: {"path": "<path>", "edits": [{"old": "<exact text>", "new": "<replacement>"}], '
+        '"changes": ["<one line per change>"]}\n\n'
         f"MIGRATIONS:\n{_j(decisions)}\n\n"
         f"RELEVANT LINES IN THIS FILE:\n" + "\n".join(usage) + "\n\n"
-        f"ORIGINAL FILE `{path}`:\n<<<FILE\n{content}\nFILE>>>"
+        f"FILE `{path}`:\n<<<FILE\n{content}\nFILE>>>"
     )
 
 

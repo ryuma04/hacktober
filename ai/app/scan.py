@@ -247,19 +247,6 @@ async def run(repo: Path, py: str, log: gemma.CallLog) -> dict:
             "risk": {"level": lvl, "score": s, "indicators": inds, "rationale": "", "rationale_provenance": "derived"},
         })
 
-    # Gemma: rationale for every dependency with any risk
-    risky = [d for d in deps if d["risk"]["score"] > 0]
-    if risky:
-        payload = [{"name": d["name"], "pinned": d["pinned_version"], "latest": d["latest_version"],
-                    "indicators": [{"code": i["code"], "detail": i["detail"]} for i in d["risk"]["indicators"]]}
-                   for d in risky]
-        reply = await gemma.complete_json(log, "risk_rationale", prompts.risk_rationale(py, payload), prompts.ItemsReply,
-                                         deadline_s=90)
-        texts = {i.name.lower(): i.text for i in reply.items} if reply else {}
-        for d in risky:
-            t = texts.get(d["name"].lower())
-            if t:
-                d["risk"]["rationale"], d["risk"]["rationale_provenance"] = t, "ai"
     for d in deps:
         if not d["risk"]["rationale"]:
             inds = d["risk"]["indicators"]

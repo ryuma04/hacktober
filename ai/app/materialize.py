@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import gemma, knowledge, pysrc, state
 from .manifests import normalize
-from .prompts import Rewrite, rewrite_file
+from .prompts import EditsReply, rewrite_file
 
 CODE_STRATEGIES = {"replace", "stdlib", "remove", "upgrade"}
 
@@ -98,6 +98,23 @@ def _rewrite_manifests(src: Path, dst: Path, deps: list[dict], proposals: dict, 
     return changes
 
 
+def apply_edits(src: str, edits: list[tuple[str, str]]) -> tuple[str, str | None]:
+    """Apply search/replace edits; each `old` must match exactly once (CRLF-insensitive)."""
+    text = src.replace("\r\n", "\n")
+    for n, (old, new) in enumerate(edits, 1):
+        old, new = old.replace("\r\n", "\n"), new.replace("\r\n", "\n")
+        if not old:
+            return src, f"edit {n} has an empty search text"
+        count = text.count(old)
+        if count == 0 and old.strip() and text.count(old.strip()) == 1:
+            old, new = old.strip(), new.strip()  # tolerate surrounding blank lines/whitespace
+            count = 1
+        if count != 1:
+            return src, f"edit {n} search text {'not found' if count == 0 else 'is ambiguous'} in the file"
+        text = text.replace(old, new, 1)
+    return text, None
+
+
 def _imports(tree: ast.AST) -> set[str]:
     mods = set()
     for n in ast.walk(tree):
@@ -133,7 +150,6 @@ async def run(job_dir: Path, repo: Path, out_repo: Path, py: str, log: gemma.Cal
     if out_repo.exists():
         shutil.rmtree(out_repo)
     shutil.copytree(repo, out_repo, ignore=shutil.ignore_patterns(".git", "__pycache__", ".depexit"))
-    manifest_changes = _rewrite_manifests(repo, out_repo, deps, proposals, scan["install_files"])
 
     # imports the migrated code may use: local packages + every remaining/new dependency's import names
     allowed = set(scan.get("local_packages", []))
@@ -160,15 +176,18 @@ async def run(job_dir: Path, repo: Path, out_repo: Path, py: str, log: gemma.Cal
         src = (out_repo / rel).read_text(encoding="utf-8")
         decisions = [{"dependency": d["name"], **{k: proposals[d["name"]].get(k) for k in
                                                   ("strategy", "package", "version_spec", "steps")}} for d in fdeps]
-        lines = [f"{l['line']}: {l['code']}" for d in fdeps for l in d["usage"]["locations"] if l["file"] == rel]
+        lines = list(dict.fromkeys(f"{l['line']}: {l['code']}" for d in fdeps for l in d["usage"]["locations"]
+                                   if l["file"] == rel))
         tree = ast.parse(src)
         reply = await gemma.complete_json(log, f"rewrite_file:{rel}", rewrite_file(py, rel, src, decisions, lines),
-                                          Rewrite, max_tokens=16384, deadline_s=240)
+                                          EditsReply, max_tokens=8192, deadline_s=180)
         deps_names = [d["name"] for d in fdeps]
         if reply is None:
             return {"path": rel, "status": "rejected", "reason": "Gemma 4 unavailable or returned invalid output",
                     "deps": deps_names, "changes": []}
-        new = reply.new_content.replace("\r\n", "\n")
+        new, err = apply_edits(src, [(e.old, e.new) for e in reply.edits])
+        if err:
+            return {"path": rel, "status": "rejected", "reason": err, "deps": deps_names, "changes": reply.changes}
         if new.strip() == src.strip():
             return {"path": rel, "status": "unchanged", "deps": deps_names, "changes": reply.changes}
         err = _validate(rel, src, new, allowed, _imports(tree))
@@ -180,6 +199,32 @@ async def run(job_dir: Path, repo: Path, out_repo: Path, py: str, log: gemma.Cal
         return {"path": rel, "status": "applied", "deps": deps_names, "changes": reply.changes}
 
     files = list(await asyncio.gather(*(rewrite(f, ds) for f, ds in per_file.items())))
+
+    # Keep code and manifests consistent: a dependency whose code migration did not land in EVERY file that uses it
+    # keeps its original declaration, and any partial edits involving it are reverted (to a fixpoint, because one
+    # file can mix several dependencies).
+    needs_import_gone = {"replace", "stdlib", "remove"}
+    blocked: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for f in files:
+            for name in f["deps"]:
+                if name in blocked:
+                    continue
+                strat = proposals[name]["strategy"]
+                if f["status"] == "rejected" or (f["status"] == "unchanged" and strat in needs_import_gone):
+                    blocked.add(name)
+                    changed = True
+        for f in files:
+            if f["status"] == "applied" and blocked & set(f["deps"]):
+                shutil.copyfile(repo / f["path"], out_repo / f["path"])
+                f["status"] = "reverted"
+                f["reason"] = ("reverted to keep code and manifests consistent: migration of "
+                               + ", ".join(sorted(blocked & set(f["deps"]))) + " could not be completed in all files")
+                changed = True
+    effective = {n: p for n, p in proposals.items() if n not in blocked}
+    manifest_changes = _rewrite_manifests(repo, out_repo, deps, effective, scan["install_files"])
 
     # unified diff of everything that changed
     diff_parts, ins, dels, changed = [], 0, 0, 0
@@ -206,10 +251,16 @@ async def run(job_dir: Path, repo: Path, out_repo: Path, py: str, log: gemma.Cal
         if not p:
             continue
         mine = [f for f in files if d["name"] in f["deps"]]
-        rejected = [f for f in mine if f["status"] == "rejected"]
+        if d["name"] in blocked:
+            problems = [f for f in mine if f["status"] in ("rejected", "reverted")
+                        or (f["status"] == "unchanged" and p["strategy"] in needs_import_gone)]
+            reasons = "; ".join(f"{f['path']}: {f.get('reason') or 'Gemma left the file unchanged'}" for f in problems)
+            applied[d["name"]] = {"applied": False, "files_changed": [],
+                                  "not_applied_reason": f"{reasons}. Manifest left unchanged so the project stays installable."}
+            continue
         applied[d["name"]] = {
-            "applied": not rejected,
-            "not_applied_reason": "; ".join(f"{f['path']}: {f['reason']}" for f in rejected) or None,
+            "applied": True,
+            "not_applied_reason": None,
             "files_changed": sorted({c["file"] for c in manifest_changes
                                      if any(decl["file"] == c["file"] for decl in d["declared"])
                                      or p["strategy"] == "declare"}

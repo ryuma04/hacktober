@@ -38,10 +38,8 @@ honest **limitations** list. Output: `capsule.json` (JSON-Schema validated, `ai/
 ## How Gemma 4 is used (and verified)
 | Step | Gemma 4 does | Deterministic code does |
 |---|---|---|
-| Risk | Explains why each dependency is risky | Collects indicators, computes the 0–100 score |
-| Usage | Summarises how each dependency is used | Finds every location by AST |
-| Propose | **Chooses** strategy + replacement, writes steps, suggested tests, concerns | Supplies candidates and their PyPI health; validates the package exists and the specifier parses |
-| Materialize | **Rewrites each affected source file** | Rewrites manifests; rejects edits that don't compile, add unexpected imports or change size wildly; never edits tests |
+| Propose | **Chooses** strategy + replacement, writes steps, suggested tests, concerns, and explains the risk and the usage | Collects indicators, computes the 0–100 score, finds every usage by AST, supplies candidates with PyPI health; validates the package exists and the specifier parses |
+| Materialize | **Writes the code edits** for each affected source file (minimal search/replace) | Applies edits only on an exact match; rejects edits that don't compile or add unexpected imports; keeps manifests consistent with what actually landed; never edits tests |
 | Compare | **Explains each test gap** and rates severity | Parses JUnit, pairs tests, attributes gaps to dependencies |
 
 If Gemma is unavailable the pipeline still finishes with deterministic fallbacks, and the capsule says so
@@ -51,6 +49,7 @@ If Gemma is unavailable the pipeline still finishes with deterministic fallbacks
 - **Model:** Gemma 4 instruction-tuned — `gemma-4-26b-a4b-it` (primary, ~8 s per call), `gemma-4-31b-it` (fallback when the primary is overloaded or unavailable). Configurable via `GEMMA_MODELS`.
 - **Access:** hosted, via the **Google AI Studio** Gemini API (`generateContent`), API keys in `GEMINI_API_KEYS`.
 - **Key rotation:** several keys can be listed; when one hits its quota (HTTP 429) it is cooled down and the next key is used automatically; rejected keys are retired. `.env` is re-read on change, so keys can be added without a restart.
+- **Speed:** each call races both models (first valid reply wins); answers are cached by prompt, so re-analysing unchanged code reuses earlier answers — disclosed in the capsule (`ai.cached_calls`) and switchable off with `GEMMA_CACHE=0`.
 - **Optional last-resort fallback:** xAI Grok (`XAI_API_KEYS`), used only if every Gemma key and model fails; such calls are recorded under their own model name in `ai_calls.jsonl`.
 - **Terms:** [Gemma Terms of Use](https://ai.google.dev/gemma/terms) and the [Gemini API Additional Terms of Service](https://ai.google.dev/gemini-api/terms).
 
