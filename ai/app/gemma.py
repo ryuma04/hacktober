@@ -170,7 +170,7 @@ def _http() -> httpx.AsyncClient:
     global _client
     if _client is None:
         t = float(config.get("GEMMA_TIMEOUT_S", "120"))
-        _client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=t))
+        _client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=min(t, 90.0)))
     return _client
 
 
@@ -185,15 +185,24 @@ def configured() -> bool:
     return bool(KeyPool.configured()) or bool(config.get("XAI_API_KEYS").strip())
 
 
-async def generate(prompt: str, temperature: float = 0.2, max_tokens: int = 8192) -> tuple[str, str, int]:
-    """Return (text, model, attempts). Rotates keys on quota/auth errors and models on overload."""
-    if not configured():
+def fallback_models() -> list[str]:
+    """Non-Gemma Gemini models used only when Gemma 4 fails or misses its time budget."""
+    return [m.strip() for m in config.get("FALLBACK_MODELS", "gemini-3.5-flash,gemini-3.1-flash-lite").split(",")
+            if m.strip()]
+
+
+def _abandon(task: asyncio.Future) -> None:
+    """Cancel without waiting (a slow HTTP read must never hold up the pipeline) and silence its late result."""
+    task.cancel()
+    task.add_done_callback(lambda f: f.cancelled() or f.exception())
+
+
+async def generate(prompt: str, temperature: float = 0.2, max_tokens: int = 8192,
+                   model_list: list[str] | None = None) -> tuple[str, str, int]:
+    """Return (text, model, attempts) from the Gemini API (Gemma 4 models by default). Rotates keys on quota/auth
+    errors and hedges to the next model when the first is slow. Raises GemmaUnavailable."""
+    if not KeyPool.configured():
         raise GemmaUnavailable("no GEMINI_API_KEYS configured")
-    if not KeyPool.configured():  # only the fallback provider is configured
-        fb = await _grok(prompt, temperature, max_tokens)
-        if fb:
-            return fb[0], fb[1], 1
-        raise GemmaUnavailable("no GEMINI_API_KEYS configured and fallback provider unavailable")
     body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}}
     stats = {"attempts": 0, "last_err": "unknown error"}
@@ -255,8 +264,8 @@ async def generate(prompt: str, temperature: float = 0.2, max_tokens: int = 8192
 
     if True:  # concurrency is limited by the caller (complete_json / health)
         for round_ in range(2):
-            # Hedged request: all models race (each on its own key); the first valid reply wins, the rest are cancelled.
-            ms = models()
+            # Hedged request: the first model starts; the others join if it is slow or fails; first valid reply wins.
+            ms = model_list or models()
             tasks = [asyncio.create_task(try_model(ms[0]))]
             try:
                 hedge_after = float(config.get("GEMMA_HEDGE_AFTER_S", "30"))
@@ -274,13 +283,10 @@ async def generate(prompt: str, temperature: float = 0.2, max_tokens: int = 8192
                         continue
             finally:
                 for task in tasks:
-                    task.cancel()
+                    _abandon(task)
             if not POOL.next_key(set()):
                 break
             await asyncio.sleep(3)
-        fallback = await _grok(prompt, temperature, max_tokens)
-        if fallback:
-            return fallback[0], fallback[1], stats["attempts"] + 1
     raise GemmaUnavailable(stats["last_err"])
 
 
@@ -358,12 +364,17 @@ def extract_json(text: str):
 
 async def complete_json(log_: CallLog, purpose: str, prompt: str, schema: type[T],
                         max_tokens: int = 8192, deadline_s: float = 180) -> T | None:
-    """Ask Gemma for JSON matching `schema` within `deadline_s` (total, including one repair retry).
-    Returns None (and logs a failed call) if Gemma is unavailable or too slow; callers fall back deterministically.
+    """Ask for JSON matching `schema` within a HARD `deadline_s`.
 
-    Valid answers are cached by (prompt, schema): re-analysing the same code with the same facts reuses Gemma's
-    earlier answer instead of re-generating it. Cached calls are logged with cached=true and disclosed in the capsule.
-    Set GEMMA_CACHE=0 to disable."""
+    Provider chain (each tier gets a time budget; a slow call is abandoned, never awaited):
+      1. Gemma 4 (GEMMA_MODELS)                   primary, GEMMA_BUDGET_SHARE (default 60%) of the deadline
+      2. Gemini fallback models (FALLBACK_MODELS)  only if Gemma failed or ran out of time
+      3. xAI Grok (XAI_API_KEYS)                   last resort
+    Every call is logged with the model that actually answered, so the capsule can disclose fallback use.
+    Returns None if every tier fails; callers then use deterministic fallbacks (provenance "derived").
+
+    Valid answers are cached by (prompt, schema) and reused for identical prompts (logged cached=true, disclosed in
+    the capsule). GEMMA_CACHE=0 disables the cache."""
     key = hashlib.sha256(f"{schema.__name__}\n{prompt}".encode("utf-8")).hexdigest()
     cache_file = config.data_dir() / "_cache" / "gemma" / f"{key}.json"
     if config.get("GEMMA_CACHE", "1") != "0" and cache_file.exists():
@@ -373,46 +384,76 @@ async def complete_json(log_: CallLog, purpose: str, prompt: str, schema: type[T
             log_.record(purpose, entry["model"], 0, True, prompt, entry["text"], cached=True)
             return obj
         except (OSError, ValueError, ValidationError, KeyError):
-            pass  # unreadable or stale entry: ask Gemma again
+            pass  # unreadable or stale entry: ask again
     async with _semaphore():
-        result, text, model = await _complete_json(log_, purpose, prompt, schema, max_tokens, deadline_s)
+        result, text, model = await _complete_chain(log_, purpose, prompt, schema, max_tokens, deadline_s)
     if result is not None:
         try:
             cache_file.parent.mkdir(parents=True, exist_ok=True)
-            cache_file.write_text(json.dumps({"model": model, "text": text,
-                                              "purpose": purpose, "created": time.strftime("%Y-%m-%dT%H:%M:%S")}),
-                                  encoding="utf-8")
+            cache_file.write_text(json.dumps({"model": model, "text": text, "purpose": purpose,
+                                              "created": time.strftime("%Y-%m-%dT%H:%M:%S")}), encoding="utf-8")
         except OSError:
             pass
     return result
 
 
-async def _complete_json(log_: CallLog, purpose: str, prompt: str, schema: type[T], max_tokens: int,
-                         deadline_s: float) -> tuple[T | None, str, str]:
-    current = prompt
-    t_start = time.time()
-    for attempt in range(2):
-        t0 = time.time()
-        remaining = deadline_s - (t0 - t_start)
-        if remaining < 15:
-            return None, "", ""
-        try:
-            text, model, n = await asyncio.wait_for(generate(current, max_tokens=max_tokens), timeout=remaining)
-        except asyncio.TimeoutError:
-            log_.record(purpose, ",".join(models()), int((time.time() - t0) * 1000), False, current, "",
-                        f"timed out after {int(remaining)}s (deterministic fallback used)")
-            return None, "", ""
-        except GemmaUnavailable as e:
-            log_.record(purpose, ",".join(models()), int((time.time() - t0) * 1000), False, current, "", str(e))
-            return None, "", ""
-        try:
-            obj = schema.model_validate(extract_json(text))
-            log_.record(purpose, model, int((time.time() - t0) * 1000), True, current, text, attempts=n)
-            return obj, text, model
-        except (ValueError, ValidationError) as e:
-            err = str(e)[:600]
-            log_.record(purpose, model, int((time.time() - t0) * 1000), False, current, text,
-                        f"invalid JSON: {err}", attempts=n)
-            current = (prompt + f"\n\nYour previous reply was invalid: {err}\n"
-                       "Reply with ONLY the corrected JSON object, nothing else.")
+async def _within(coro, timeout: float):
+    """Run coro with a hard timeout; on timeout abandon it (do not wait for cancellation) and raise TimeoutError."""
+    task = asyncio.ensure_future(coro)
+    done, _ = await asyncio.wait({task}, timeout=max(0.0, timeout))
+    if not done:
+        _abandon(task)
+        raise asyncio.TimeoutError
+    return task.result()
+
+
+async def _complete_chain(log_: CallLog, purpose: str, prompt: str, schema: type[T], max_tokens: int,
+                          deadline_s: float) -> tuple[T | None, str, str]:
+    t_end = time.time() + deadline_s
+    gemma_share = float(config.get("GEMMA_BUDGET_SHARE", "0.6"))
+    tiers = []
+    if KeyPool.configured():
+        tiers.append(("gemma", lambda q: generate(q, max_tokens=max_tokens), gemma_share))
+        if fallback_models():
+            tiers.append(("gemini", lambda q: generate(q, max_tokens=max_tokens, model_list=fallback_models()), 0.85))
+    if any(k for k in re.split(r"[,\s]+", config.get("XAI_API_KEYS")) if k):
+        tiers.append(("xai", lambda q: _grok_or_raise(q, max_tokens), 1.0))
+    if not tiers:
+        log_.record(purpose, "-", 0, False, prompt, "", "no API keys configured")
+        return None, "", ""
+    for name, call, share in tiers:
+        tier_start = time.time()
+        tier_end = tier_start + (t_end - tier_start) * share  # each tier leaves time for the ones after it
+        current = prompt
+        for attempt in range(2):  # one JSON-repair retry per tier
+            remaining = tier_end - time.time()
+            if remaining < 5:
+                break
+            t0 = time.time()
+            try:
+                text, model, n = await _within(call(current), remaining)
+            except asyncio.TimeoutError:
+                log_.record(purpose, name, int((time.time() - t0) * 1000), False, current, "",
+                            f"{name}: no answer within {int(remaining)}s budget")
+                break
+            except GemmaUnavailable as e:
+                log_.record(purpose, name, int((time.time() - t0) * 1000), False, current, "", str(e))
+                break
+            try:
+                obj = schema.model_validate(extract_json(text))
+                log_.record(purpose, model, int((time.time() - t0) * 1000), True, current, text, attempts=n)
+                return obj, text, model
+            except (ValueError, ValidationError) as e:
+                err = str(e)[:600]
+                log_.record(purpose, model, int((time.time() - t0) * 1000), False, current, text,
+                            f"invalid JSON: {err}", attempts=n)
+                current = (prompt + f"\n\nYour previous reply was invalid: {err}\n"
+                           "Reply with ONLY the corrected JSON object, nothing else.")
     return None, "", ""
+
+
+async def _grok_or_raise(prompt: str, max_tokens: int) -> tuple[str, str, int]:
+    fb = await _grok(prompt, 0.2, max_tokens)
+    if not fb:
+        raise GemmaUnavailable("xai: no usable key (credits exhausted or rejected)")
+    return fb[0], fb[1], 1

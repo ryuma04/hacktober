@@ -32,14 +32,18 @@ def _prefix(base: str, u: str | None) -> str | None:
     return u
 
 
-def _calls(job_dir: Path) -> tuple[int, int, str, int]:
+def _calls(job_dir: Path) -> tuple[int, int, str, int, dict[str, int]]:
     p = job_dir / "ai_calls.jsonl"
     if not p.exists():
-        return 0, 0, "", 0
+        return 0, 0, "", 0, {}
     recs = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
-    ok_models = [r["model"] for r in recs if r.get("ok")]
-    model = max(set(ok_models), key=ok_models.count) if ok_models else ""
-    return len(recs), sum(1 for r in recs if not r.get("ok")), model, sum(1 for r in recs if r.get("cached"))
+    used: dict[str, int] = {}
+    for r in recs:
+        if r.get("ok"):
+            used[r["model"]] = used.get(r["model"], 0) + 1
+    gemma_ok = {m: n for m, n in used.items() if m.startswith("gemma")}
+    model = max(gemma_ok, key=gemma_ok.get) if gemma_ok else (max(used, key=used.get) if used else "")
+    return len(recs), sum(1 for r in recs if not r.get("ok")), model, sum(1 for r in recs if r.get("cached")), used
 
 
 def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
@@ -97,7 +101,8 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
             "replacement": None if not p else {
                 "strategy": p["strategy"], "package": p.get("package"), "version_spec": p.get("version_spec"),
                 "rationale": p["rationale"], "confidence": float(p.get("confidence", 0.5)),
-                "alternatives": p.get("alternatives", []), "provenance": p.get("provenance", "ai")},
+                "alternatives": p.get("alternatives", []), "provenance": p.get("provenance", "ai"),
+                "model": p.get("model")},
             "migration": None if not p or p["strategy"] == "keep" else {
                 "steps": p.get("steps", []), "files_changed": (a or {}).get("files_changed", []),
                 "applied": (a or {}).get("applied", False) if a else False,
@@ -136,7 +141,13 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
         f"{at_risk} of {len(out_deps)} dependencies are at risk; tests passing {base['passed']}/{base['total']} "
         f"before and {mig['passed']}/{mig['total']} after migration.")
 
-    n_calls, n_failed, model, n_cached = _calls(job_dir)
+    n_calls, n_failed, model, n_cached, models_used = _calls(job_dir)
+    fallback_answers = {m: n for m, n in models_used.items() if not m.startswith("gemma")}
+    if fallback_answers:
+        limitations.append(
+            "Gemma 4 did not answer every call in time; "
+            + ", ".join(f"{n} answer(s) came from fallback model {m}" for m, n in sorted(fallback_answers.items()))
+            + ". Each decision records the model that produced it (replacement.model); see ai_calls.jsonl.")
     for stage, err in (stage_errors or {}).items():
         limitations.append(f"Stage '{stage}' failed: {err}")
     if not gemma.configured() or (n_calls and n_failed == n_calls):
@@ -166,6 +177,7 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
         "target": {**target, "manifests": scan.get("manifests", [])},
         "ai": {"provider": "Google AI Studio (Gemini API)", "model": model or ",".join(gemma.models()),
                "calls": n_calls, "failed_calls": n_failed, "cached_calls": n_cached,
+               "models_used": models_used, "fallback_models_used": sorted(fallback_answers),
                "fallback_used": n_failed > 0 or not gemma.configured(), "terms_url": config.GEMMA_TERMS_URL},
         "summary": {"dependencies_total": len(out_deps), "at_risk": at_risk, "by_level": by_level,
                     "baseline": base, "migrated": mig, "gaps": gap_counts, "verdict": verdict, "headline": headline},

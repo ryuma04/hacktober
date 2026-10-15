@@ -88,6 +88,9 @@ async def _one(dep: dict, py: str, others: list[str], log: gemma.CallLog) -> dic
         err = await _validate(dec)
         if not err:
             out = dec.model_dump()
+            # which model actually answered (Gemma 4, or a disclosed fallback model)
+            out["model"] = next((c["model"] for c in reversed(log.calls)
+                                 if c["purpose"] == f"decide:{dep['name']}" and c["ok"]), None)
             if out["strategy"] in ("stdlib", "remove"):
                 out["version_spec"] = None
             out["provenance"] = "ai"

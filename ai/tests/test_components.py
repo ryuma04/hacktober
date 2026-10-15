@@ -111,12 +111,14 @@ def test_deterministic_fallback_when_gemma_offline(monkeypatch):
         raise GemmaUnavailable("Simulated quota exhaustion or offline mode")
 
     monkeypatch.setattr(gemma, "generate", mock_offline)
+    monkeypatch.setattr(gemma, "_grok_or_raise", mock_offline)  # every tier of the provider chain is offline
+    monkeypatch.setenv("GEMMA_CACHE", "0")
 
-    # Calling complete_json should return None and log the failed call
+    # Calling complete_json should return None and log one failed call per provider tier tried
     log_ = gemma.CallLog(None)
     import asyncio
     res = asyncio.run(gemma.complete_json(log_, "test_purpose", "prompt text", prompts.ItemsReply))
     assert res is None
-    assert len(log_.calls) == 1
-    assert log_.calls[0]["ok"] is False
+    assert len(log_.calls) >= 1
+    assert all(c["ok"] is False for c in log_.calls)
     assert "Simulated quota exhaustion" in log_.calls[0]["error"]

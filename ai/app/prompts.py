@@ -18,6 +18,16 @@ def _j(obj) -> str:
     return json.dumps(obj, indent=1, ensure_ascii=False)
 
 
+# ---------- generic list reply (kept for callers/tests that batch short texts) ----------
+class _Item(BaseModel):
+    name: str
+    text: str
+
+
+class ItemsReply(BaseModel):
+    items: list[_Item]
+
+
 # ---------- decide ----------
 class Alternative(BaseModel):
     package: str

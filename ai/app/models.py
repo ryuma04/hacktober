@@ -68,6 +68,7 @@ class Replacement(BaseModel):
     confidence: float = Field(ge=0, le=1)
     alternatives: list[Alt]
     provenance: Literal["ai", "derived"]
+    model: str | None = None  # model that produced the decision (Gemma 4 or a disclosed fallback)
 
 
 class Migration(BaseModel):
