@@ -1,0 +1,3 @@
+$ python -m venv /venv && /venv/bin/pip install -q --disable-pip-version-check -r requirements.txt -r requirements-dev.txt
+Successfully installed certstore-2026.9.1 click-8.2.1 httpkit-2.32.5 markuplib-3.0.2 platdirs-4.3.8 pytest-8.4.2 python-dateutil-2.9.0 richout-14.1.0 tplengine-3.1.4 valimodel-2.9.1
+exit code: 0

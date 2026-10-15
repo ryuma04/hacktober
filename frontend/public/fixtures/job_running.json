@@ -1,0 +1,15 @@
+{
+  "id": "dx_demo01", "repo_url": "https://github.com/example/pinglog", "ref": "main", "commit": "a1b2c3d",
+  "status": "running", "created_at": "2026-10-15T10:00:00Z",
+  "stages": [
+    { "id": "clone", "label": "Cloning repository", "status": "completed", "started_at": "2026-10-15T10:00:01Z", "finished_at": "2026-10-15T10:00:03Z", "duration_s": 2.1 },
+    { "id": "scan", "label": "Scanning dependencies", "status": "completed", "started_at": "2026-10-15T10:00:03Z", "finished_at": "2026-10-15T10:00:15Z", "duration_s": 11.8 },
+    { "id": "usage", "label": "Mapping usage", "status": "completed", "started_at": "2026-10-15T10:00:15Z", "finished_at": "2026-10-15T10:00:22Z", "duration_s": 6.4 },
+    { "id": "propose", "label": "Gemma 4: proposing replacements", "status": "running", "started_at": "2026-10-15T10:00:22Z" },
+    { "id": "materialize", "label": "Building migrated workspace", "status": "pending" },
+    { "id": "sandbox_baseline", "label": "Testing original dependencies", "status": "running", "started_at": "2026-10-15T10:00:03Z" },
+    { "id": "sandbox_migrated", "label": "Testing replacements", "status": "pending" },
+    { "id": "compare", "label": "Gemma 4: analysing gaps", "status": "pending" },
+    { "id": "capsule", "label": "Generating Exit Capsule", "status": "pending" }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "dx_fail01", "repo_url": "https://github.com/example/does-not-exist", "ref": "main",
+  "status": "failed", "created_at": "2026-10-15T09:20:02Z", "finished_at": "2026-10-15T09:20:04Z",
+  "error": "clone failed: repository not found",
+  "stages": [
+    { "id": "clone", "label": "Cloning repository", "status": "failed", "started_at": "2026-10-15T09:20:02Z", "finished_at": "2026-10-15T09:20:04Z", "duration_s": 1.9, "error": "fatal: repository 'https://github.com/example/does-not-exist/' not found" },
+    { "id": "scan", "label": "Scanning dependencies", "status": "skipped" },
+    { "id": "usage", "label": "Mapping usage", "status": "skipped" },
+    { "id": "propose", "label": "Gemma 4: proposing replacements", "status": "skipped" },
+    { "id": "materialize", "label": "Building migrated workspace", "status": "skipped" },
+    { "id": "sandbox_baseline", "label": "Testing original dependencies", "status": "skipped" },
+    { "id": "sandbox_migrated", "label": "Testing replacements", "status": "skipped" },
+    { "id": "compare", "label": "Gemma 4: analysing gaps", "status": "skipped" },
+    { "id": "capsule", "label": "Generating Exit Capsule", "status": "skipped" }
+  ]
+}

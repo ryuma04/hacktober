@@ -1,0 +1,74 @@
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,10 +1,9 @@
+ pytest
+-tomlread==0.10.2
+-dirsy==1.4.4
+-tplengine==2.1.0
+-valimodel==1.10.2
+-httpkit==2.31.0
++platdirs>=4.3,<5
++tplengine>=3.1.4,<4
++valimodel>=2.9,<3
++httpkit>=2.32.5,<3
++certstore>=2024.2
+ click>=7
+-compatsix
+ python-dateutil
+ richout>=13
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -12,6 +12,7 @@
+ dependencies = [
+-    "dirsy==1.4.4",
+-    "tplengine==2.1.0",
+-    "valimodel>=2",
++    "platdirs>=4.3,<5",
++    "tplengine>=3.1.4,<4",
++    "valimodel>=2.9,<3",
++    "certstore>=2024.2",
+     "click>=7",
+ ]
+--- a/pinglog/cache.py
++++ b/pinglog/cache.py
+@@ -1,6 +1,6 @@
+ import json
+ from pathlib import Path
+
+-from dirsy import user_cache_dir
++from platdirs import user_cache_dir
+
+
+--- a/pinglog/config.py
++++ b/pinglog/config.py
+@@ -1,20 +1,20 @@
+ from typing import List
+
+-import tomlread
+-from valimodel import BaseModel, validator
++import tomllib
++from valimodel import BaseModel, ConfigDict, field_validator
+
+
+ class Site(BaseModel):
++    model_config = ConfigDict(str_strip_whitespace=True)
++
+     name: str
+     url: str
+
+-    class Config:
+-        anystr_strip_whitespace = True
+-
+-    @validator("url")
++    @field_validator("url")
++    @classmethod
+     def url_has_scheme(cls, value):
+         if not value.startswith(("http://", "https://")):
+             raise ValueError("url must start with http:// or https://")
+         return value
+@@ -30,4 +30,5 @@
+ def load_settings(path="sites.toml"):
+-    data = tomlread.load(path)
++    with open(path, "rb") as f:
++        data = tomllib.load(f)
+     return Settings(**data)

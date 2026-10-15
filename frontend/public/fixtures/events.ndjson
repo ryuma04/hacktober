@@ -1,0 +1,40 @@
+{"event":"job_started","seq":1,"ts":"2026-10-15T10:00:00Z","repo_url":"https://github.com/example/pinglog"}
+{"event":"stage_started","seq":2,"ts":"2026-10-15T10:00:01Z","stage":"clone"}
+{"event":"log","seq":3,"ts":"2026-10-15T10:00:02Z","stage":"clone","level":"info","message":"git clone --depth 1 https://github.com/example/pinglog"}
+{"event":"stage_completed","seq":4,"ts":"2026-10-15T10:00:03Z","stage":"clone","duration_s":2.1,"stats":{"commit":"a1b2c3d"}}
+{"event":"stage_started","seq":5,"ts":"2026-10-15T10:00:03Z","stage":"scan"}
+{"event":"stage_started","seq":6,"ts":"2026-10-15T10:00:03Z","stage":"sandbox_baseline"}
+{"event":"log","seq":7,"ts":"2026-10-15T10:00:05Z","stage":"scan","level":"info","message":"Found 3 manifests: requirements.txt, requirements-dev.txt, pyproject.toml"}
+{"event":"log","seq":8,"ts":"2026-10-15T10:00:07Z","stage":"scan","level":"warn","message":"valimodel: requirements.txt ==1.10.2 conflicts with pyproject.toml >=2"}
+{"event":"log","seq":9,"ts":"2026-10-15T10:00:09Z","stage":"scan","level":"warn","message":"tplengine==2.1.0: 2 OSV advisories"}
+{"event":"log","seq":10,"ts":"2026-10-15T10:00:10Z","stage":"scan","level":"warn","message":"certstore is imported but not declared"}
+{"event":"ai_call","seq":11,"ts":"2026-10-15T10:00:14Z","stage":"scan","purpose":"risk_rationale","model":"gemma-4-example","latency_ms":3810,"ok":true}
+{"event":"stage_completed","seq":12,"ts":"2026-10-15T10:00:15Z","stage":"scan","duration_s":11.8,"stats":{"dependencies":8,"at_risk":6}}
+{"event":"stage_started","seq":13,"ts":"2026-10-15T10:00:15Z","stage":"usage"}
+{"event":"log","seq":14,"ts":"2026-10-15T10:00:18Z","stage":"usage","level":"warn","message":"Private API: pinglog/encoding.py:5 uses httpkit.utils._parse_content_type_header"}
+{"event":"log","seq":15,"ts":"2026-10-15T10:00:18Z","stage":"usage","level":"warn","message":"Monkeypatch: pinglog/http_patch.py:14 replaces httpkit.Session.request"}
+{"event":"ai_call","seq":16,"ts":"2026-10-15T10:00:21Z","stage":"usage","purpose":"usage_summary","model":"gemma-4-example","latency_ms":2950,"ok":true}
+{"event":"stage_completed","seq":17,"ts":"2026-10-15T10:00:22Z","stage":"usage","duration_s":6.4,"stats":{"locations":17,"files":6}}
+{"event":"stage_started","seq":18,"ts":"2026-10-15T10:00:22Z","stage":"propose"}
+{"event":"ai_call","seq":19,"ts":"2026-10-15T10:00:41Z","stage":"propose","purpose":"decide:tplengine","model":"gemma-4-example","latency_ms":18900,"ok":true}
+{"event":"ai_call","seq":20,"ts":"2026-10-15T10:00:44Z","stage":"propose","purpose":"decide:valimodel","model":"gemma-4-example","latency_ms":21400,"ok":true}
+{"event":"log","seq":21,"ts":"2026-10-15T10:00:51Z","stage":"sandbox_baseline","level":"info","message":"install ok (exit 0); pytest exit 2: 6 passed, 2 errors"}
+{"event":"stage_completed","seq":22,"ts":"2026-10-15T10:00:51Z","stage":"sandbox_baseline","duration_s":48.3,"stats":{"passed":6,"failed":0,"errors":2}}
+{"event":"ai_call","seq":23,"ts":"2026-10-15T10:01:05Z","stage":"propose","purpose":"decide:dirsy","model":"gemma-4-example","latency_ms":14200,"ok":true}
+{"event":"ai_call","seq":24,"ts":"2026-10-15T10:01:30Z","stage":"propose","purpose":"decide:certstore","model":"gemma-4-example","latency_ms":90000,"ok":false,"error":"timeout"}
+{"event":"log","seq":25,"ts":"2026-10-15T10:01:30Z","stage":"propose","level":"warn","message":"certstore: Gemma call failed, using deterministic fallback (declare)"}
+{"event":"stage_completed","seq":26,"ts":"2026-10-15T10:01:58Z","stage":"propose","duration_s":96.0,"stats":{"proposals":7}}
+{"event":"stage_started","seq":27,"ts":"2026-10-15T10:01:58Z","stage":"materialize"}
+{"event":"ai_call","seq":28,"ts":"2026-10-15T10:02:40Z","stage":"materialize","purpose":"rewrite_file:pinglog/config.py","model":"gemma-4-example","latency_ms":41200,"ok":true}
+{"event":"ai_call","seq":29,"ts":"2026-10-15T10:03:10Z","stage":"materialize","purpose":"rewrite_file:pinglog/http_patch.py","model":"gemma-4-example","latency_ms":29800,"ok":true}
+{"event":"log","seq":30,"ts":"2026-10-15T10:03:11Z","stage":"materialize","level":"warn","message":"Rejected rewrite of pinglog/http_patch.py: SyntaxError at line 9; original kept"}
+{"event":"stage_completed","seq":31,"ts":"2026-10-15T10:03:40Z","stage":"materialize","duration_s":102.3,"stats":{"files_applied":4,"files_rejected":1}}
+{"event":"stage_started","seq":32,"ts":"2026-10-15T10:03:40Z","stage":"sandbox_migrated"}
+{"event":"log","seq":33,"ts":"2026-10-15T10:04:25Z","stage":"sandbox_migrated","level":"info","message":"install ok (exit 0); pytest exit 1: 7 passed, 1 failed"}
+{"event":"stage_completed","seq":34,"ts":"2026-10-15T10:04:25Z","stage":"sandbox_migrated","duration_s":44.9,"stats":{"passed":7,"failed":1,"errors":0}}
+{"event":"stage_started","seq":35,"ts":"2026-10-15T10:04:25Z","stage":"compare"}
+{"event":"ai_call","seq":36,"ts":"2026-10-15T10:06:28Z","stage":"compare","purpose":"explain_gaps","model":"gemma-4-example","latency_ms":122000,"ok":true}
+{"event":"stage_completed","seq":37,"ts":"2026-10-15T10:06:30Z","stage":"compare","duration_s":124.6,"stats":{"fixed":2,"regressed":1,"still_failing":0}}
+{"event":"stage_started","seq":38,"ts":"2026-10-15T10:06:30Z","stage":"capsule"}
+{"event":"stage_completed","seq":39,"ts":"2026-10-15T10:06:41Z","stage":"capsule","duration_s":10.8,"stats":{"schema_valid":true}}
+{"event":"job_completed","seq":40,"ts":"2026-10-15T10:06:41Z","status":"completed","summary":{"dependencies_total":8,"at_risk":6,"verdict":"migrate_with_care"}}

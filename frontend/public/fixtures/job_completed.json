@@ -1,0 +1,24 @@
+{
+  "id": "dx_demo01", "repo_url": "https://github.com/example/pinglog", "ref": "main", "commit": "a1b2c3d",
+  "status": "completed", "created_at": "2026-10-15T10:00:00Z", "finished_at": "2026-10-15T10:06:41Z",
+  "stages": [
+    { "id": "clone", "label": "Cloning repository", "status": "completed", "started_at": "2026-10-15T10:00:01Z", "finished_at": "2026-10-15T10:00:03Z", "duration_s": 2.1 },
+    { "id": "scan", "label": "Scanning dependencies", "status": "completed", "started_at": "2026-10-15T10:00:03Z", "finished_at": "2026-10-15T10:00:15Z", "duration_s": 11.8 },
+    { "id": "usage", "label": "Mapping usage", "status": "completed", "started_at": "2026-10-15T10:00:15Z", "finished_at": "2026-10-15T10:00:22Z", "duration_s": 6.4 },
+    { "id": "propose", "label": "Gemma 4: proposing replacements", "status": "completed", "started_at": "2026-10-15T10:00:22Z", "finished_at": "2026-10-15T10:01:58Z", "duration_s": 96.0 },
+    { "id": "materialize", "label": "Building migrated workspace", "status": "completed", "started_at": "2026-10-15T10:01:58Z", "finished_at": "2026-10-15T10:03:40Z", "duration_s": 102.3 },
+    { "id": "sandbox_baseline", "label": "Testing original dependencies", "status": "completed", "started_at": "2026-10-15T10:00:03Z", "finished_at": "2026-10-15T10:00:51Z", "duration_s": 48.3 },
+    { "id": "sandbox_migrated", "label": "Testing replacements", "status": "completed", "started_at": "2026-10-15T10:03:40Z", "finished_at": "2026-10-15T10:04:25Z", "duration_s": 44.9 },
+    { "id": "compare", "label": "Gemma 4: analysing gaps", "status": "completed", "started_at": "2026-10-15T10:04:25Z", "finished_at": "2026-10-15T10:06:30Z", "duration_s": 124.6 },
+    { "id": "capsule", "label": "Generating Exit Capsule", "status": "completed", "started_at": "2026-10-15T10:06:30Z", "finished_at": "2026-10-15T10:06:41Z", "duration_s": 10.8 }
+  ],
+  "summary": {
+    "dependencies_total": 8, "at_risk": 6,
+    "by_level": { "critical": 1, "high": 2, "medium": 3, "low": 1, "none": 1 },
+    "baseline": { "passed": 6, "failed": 0, "errors": 2, "skipped": 0, "total": 8, "status": "tests_failed" },
+    "migrated": { "passed": 7, "failed": 1, "errors": 0, "skipped": 0, "total": 8, "status": "tests_failed" },
+    "gaps": { "fixed": 2, "regressed": 1, "still_failing": 0 },
+    "verdict": "migrate_with_care",
+    "headline": "The migration fixes 2 template tests that crashed on Python 3.12, but 1 config validation test now fails because the new validation library words its errors differently."
+  }
+}
