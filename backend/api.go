@@ -22,7 +22,7 @@ var repoURLRe = regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z
 var runIDRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
@@ -46,6 +46,8 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/analyses/{id}/migrated/{path...}", a.migratedFile)
 	mux.HandleFunc("GET /api/analyses/{id}/original/{path...}", a.originalFile)
 	mux.HandleFunc("GET /api/analyses/{id}/files", a.files)
+	mux.HandleFunc("POST /api/analyses/{id}/pull-request", a.pullRequest)
+	mux.HandleFunc("GET /api/analyses/{id}/pull-request", a.pullRequest)
 	return a.cors(mux)
 }
 

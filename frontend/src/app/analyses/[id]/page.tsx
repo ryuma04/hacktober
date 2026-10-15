@@ -6,7 +6,7 @@ import { useAnalysis } from "@/lib/useAnalysis";
 import { apiUrl } from "@/lib/url";
 import type { Dependency } from "@/lib/types";
 import { Card, CodeChip, Sticker, Button, NoticeBanner } from "@/components/ui/Base";
-import { StageTimeline, LogPanel, GemmaActivityCard } from "@/components/RunningView";
+import { LogPanel, GemmaActivityCard } from "@/components/RunningView";
 import {
   KpiTiles,
   TestComparison,
@@ -19,6 +19,9 @@ import { PatchViewer } from "@/components/PatchViewer";
 import { CodeDiffViewer } from "@/components/CodeDiffViewer";
 import { SandboxTerminals } from "@/components/SandboxTerminals";
 import { BlastMap } from "@/components/BlastMap";
+import { PipelineFlow } from "@/components/PipelineFlow";
+import { PullRequestDialog } from "@/components/PullRequestDialog";
+import { GitPullRequest } from "lucide-react";
 import {
   ArrowLeft,
   Download,
@@ -41,6 +44,7 @@ export default function AnalysisPage() {
     logs,
     aiCalls,
     sandbox,
+    stageStats,
     capsule,
     loading,
     error,
@@ -49,6 +53,7 @@ export default function AnalysisPage() {
   } = useAnalysis(id);
 
   const [selectedDependency, setSelectedDependency] = useState<Dependency | null>(null);
+  const [prOpen, setPrOpen] = useState(false);
 
   // If loading initial state
   if (loading && !job) {
@@ -106,7 +111,7 @@ export default function AnalysisPage() {
         </div>
 
         {/* Failed stage timeline */}
-        <StageTimeline stages={stages} />
+        <PipelineFlow stages={stages} logs={logs} aiCalls={aiCalls} stageStats={stageStats} sandbox={sandbox} />
       </main>
     );
   }
@@ -233,14 +238,24 @@ export default function AnalysisPage() {
             >
               <Download className="w-3.5 h-3.5" /> Download Patch
             </a>
+            <button
+              type="button"
+              onClick={() => setPrOpen(true)}
+              className="btn-primary text-xs! py-2! px-4! flex items-center gap-1.5 cursor-pointer"
+            >
+              <GitPullRequest className="w-3.5 h-3.5" /> Apply fixes
+            </button>
           </div>
+        )}
+        {prOpen && (
+          <PullRequestDialog analysisId={id} repoUrl={job?.repo_url ?? capsule?.target?.repo_url ?? ""} onClose={() => setPrOpen(false)} />
         )}
       </div>
 
       {/* STATE 1: RUNNING VIEW */}
       {!isCompleted && (
         <div className="space-y-6">
-          <StageTimeline stages={stages} />
+          <PipelineFlow stages={stages} logs={logs} aiCalls={aiCalls} stageStats={stageStats} sandbox={sandbox} />
 
           <SandboxTerminals sandbox={sandbox} stages={stages} />
 
@@ -259,6 +274,9 @@ export default function AnalysisPage() {
       {isCompleted && capsule && (
         <div className="space-y-8">
           {/* 1. KPI Tiles (4 FeatureCards) */}
+          {/* How this capsule was made: the same clickable pipeline, kept after completion */}
+          <PipelineFlow stages={stages} logs={logs} aiCalls={aiCalls} stageStats={stageStats} sandbox={sandbox} />
+
           <KpiTiles summary={capsule.summary} />
 
           {/* Repo-wide blast map (graph) */}

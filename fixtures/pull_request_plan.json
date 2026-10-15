@@ -1,0 +1,36 @@
+{
+  "dry_run": true,
+  "plan": {
+    "owner": "example",
+    "repo": "pinglog",
+    "base_commit": "a1b2c3d4e5f6a7b8c9d0",
+    "branch": "depexit/migrate-dx_demo01",
+    "title": "DepExit: migrate tplengine, tomlread, dirsy",
+    "body": "## Dependency Exit Capsule — automated migration\n\n**Verdict:** `migrate_with_care` — illustrative fixture.\n\n| | Baseline | This PR |\n|---|---|---|\n| Tests passing in Docker | 6 / 8 | 7 / 8 |\n",
+    "commits": [
+      {
+        "message": "Update pinglog/cache.py for dirsy migration",
+        "files": [
+          "pinglog/cache.py"
+        ]
+      },
+      {
+        "message": "Update pinglog/config.py for tomlread, valimodel migration",
+        "files": [
+          "pinglog/config.py"
+        ]
+      },
+      {
+        "message": "Update requirements.txt for dirsy, tomlread, tplengine, valimodel migration",
+        "files": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "files_changed": [
+      "pinglog/cache.py",
+      "pinglog/config.py",
+      "requirements.txt"
+    ]
+  }
+}

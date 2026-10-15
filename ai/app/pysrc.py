@@ -43,8 +43,9 @@ def local_packages(repo: Path) -> set[str]:
         if not base.is_dir():
             continue
         for child in base.iterdir():
-            if child.is_dir() and (child / "__init__.py").exists():
-                names.add(child.name)
+            if child.is_dir() and child.name not in SKIP_DIRS and not child.name.startswith(".") and (
+                    (child / "__init__.py").exists() or any(child.glob("*.py"))):
+                names.add(child.name)  # regular package, or an implicit namespace package (folder of .py files)
             elif child.suffix == ".py":
                 names.add(child.stem)
     for d in ("tests", "test", "testing"):

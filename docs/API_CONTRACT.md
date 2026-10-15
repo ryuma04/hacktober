@@ -30,6 +30,8 @@ Codes: `bad_request` (400), `not_found` (404), `conflict` (409, e.g. capsule not
 | GET | `/api/analyses/{id}/files` | `{files: {path, status: unchanged\|modified\|added\|removed, size_original, size_migrated, viewable}[], changed, migrated_available}`: original clone vs migrated workspace (code viewer) |
 | GET | `/api/analyses/{id}/original/{path}` | one file from the original clone (`text/plain`, ≤1 MiB; 404 if absent) |
 | GET | `/api/analyses/{id}/migrated/{path}` | one file from the migrated workspace (`text/plain`; used by the VS Code quick fix) |
+| POST | `/api/analyses/{id}/pull-request` | deliver the tested migration as a GitHub PR. Body `{token?, dry_run?, draft?}`. `dry_run: true` → `{dry_run, plan: {owner, repo, base_commit, branch, title, body, commits: {message, files}[], files_changed}}` without contacting GitHub. Otherwise → 201 `{url, number, branch, head, forked, commits, created_at}`; 200 with the same object if a PR was already opened. Token from the body (or `GITHUB_TOKEN`), used once, never stored or returned. |
+| GET | `/api/analyses/{id}/pull-request` | the PR already opened for this analysis (404 if none) |
 | GET | `/api/analyses/{id}/bundle.zip` | *(stretch)* whole capsule folder |
 
 ### 2.1 `GET /api/health` → 200

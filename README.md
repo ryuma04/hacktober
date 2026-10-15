@@ -53,6 +53,17 @@ If Gemma is unavailable the pipeline still finishes with deterministic fallbacks
 - **Fallback chain (hard time limits):** every AI call goes to **Gemma 4 first** with 60% of its time budget (`GEMMA_BUDGET_SHARE`). Only if Gemma fails or runs out of time does it fall back to Gemini (`FALLBACK_MODELS`, default `gemini-3.5-flash,gemini-3.1-flash-lite`, same AI Studio keys), then to Groq (`GROQ_API_KEYS`, `GROQ_MODEL` default `openai/gpt-oss-120b`), then to xAI Grok (`XAI_API_KEYS`). Slow calls are abandoned, never waited on. Every answer records the model that produced it: `ai_calls.jsonl`, `replacement.model` per decision, and `capsule.ai.models_used` / `fallback_models_used` plus a limitations line whenever a non-Gemma model answered.
 - **Terms:** [Gemma Terms of Use](https://ai.google.dev/gemma/terms) and the [Gemini API Additional Terms of Service](https://ai.google.dev/gemini-api/terms).
 
+## Applying the fixes
+DepExit never edits your repository directly. It clones the repo, migrates a **copy**, and proves that copy in Docker.
+To take the result:
+- **Open a pull request** ("Apply fixes" button): a branch from the exact analysed commit with one commit per changed
+  file — byte-for-byte the workspace that passed the tests — and the Exit Capsule as the PR description. If your token
+  cannot push to the repository, DepExit forks it and opens the PR from your fork. Use a fine-grained token with
+  *Contents* and *Pull requests* read/write; it is used for that one request and never stored.
+- **Apply locally:** `curl -sL <api>/api/analyses/<id>/patch.diff | git apply` on a branch from the analysed commit, then
+  re-run your tests.
+- **VS Code extension:** apply the migrated version file by file as a quick fix.
+
 ## Quick start
 Requirements: Python 3.12, Go 1.22+, Docker Desktop (running), git.
 

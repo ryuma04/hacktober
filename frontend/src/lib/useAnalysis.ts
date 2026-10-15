@@ -71,6 +71,7 @@ export function useAnalysis(id: string) {
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [aiCalls, setAiCalls] = useState<AiCallItem[]>([]);
   const [sandbox, setSandbox] = useState<SandboxLines>(emptySandbox);
+  const [stageStats, setStageStats] = useState<Partial<Record<StageId, Record<string, unknown>>>>({});
   const [capsule, setCapsule] = useState<Capsule | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +142,8 @@ export function useAnalysis(id: string) {
         case "stage_completed": {
           if (data.stage) {
             applyStageEvent(data.stage, "completed", data.duration_s);
+            const stage = data.stage;
+            if (data.stats) setStageStats((prev) => ({ ...prev, [stage]: data.stats as Record<string, unknown> }));
           }
           break;
         }
@@ -251,6 +254,7 @@ export function useAnalysis(id: string) {
     setCapsule(null);
     setLoading(true);
     setSandbox(emptySandbox());
+    setStageStats({});
 
     async function run() {
       try {
@@ -330,11 +334,24 @@ export function useAnalysis(id: string) {
           const replay = new EventSource(`${API}/api/analyses/${encodeURIComponent(id)}/events`);
           esRef.current = replay;
           const stop = () => replay.close();
-          replay.addEventListener("sandbox_log", (evt: MessageEvent) => {
+          // terminal lines, log lines and AI calls go through the normal handler (deduped by seq)
+          for (const name of ["sandbox_log", "log", "ai_call"] as const) {
+            replay.addEventListener(name, (evt: MessageEvent) => {
+              try {
+                processEventData(name, JSON.parse(evt.data));
+              } catch (e) {
+                console.error(`Error parsing ${name} replay:`, e);
+              }
+            });
+          }
+          // stage stats only: the job already has the real start/finish times, which must not be overwritten
+          replay.addEventListener("stage_completed", (evt: MessageEvent) => {
             try {
-              processEventData("sandbox_log", JSON.parse(evt.data));
-            } catch (e) {
-              console.error("Error parsing sandbox_log replay:", e);
+              const d = JSON.parse(evt.data) as SSEEventData;
+              const stage = d.stage;
+              if (stage && d.stats) setStageStats((prev) => ({ ...prev, [stage]: d.stats as Record<string, unknown> }));
+            } catch {
+              /* ignore malformed replay lines */
             }
           });
           replay.addEventListener("job_completed", stop);
@@ -426,6 +443,7 @@ export function useAnalysis(id: string) {
     logs,
     aiCalls,
     sandbox,
+    stageStats,
     capsule,
     loading,
     error,

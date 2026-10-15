@@ -165,3 +165,58 @@ export async function getWorkspaceFile(id: string, side: "original" | "migrated"
   if (!res.ok) throw new ApiRequestError(`Failed to load ${path} (${side})`, "fetch_error", res.status);
   return res.text();
 }
+
+// ---------- Pull request export ----------
+export interface PullRequestPlan {
+  owner: string;
+  repo: string;
+  base_commit: string;
+  branch: string;
+  title: string;
+  body: string;
+  commits: { message: string; files: string[] }[];
+  files_changed: string[];
+}
+
+export interface PullRequestResult {
+  url: string;
+  number: number;
+  branch: string;
+  head: string;
+  forked: boolean;
+  commits: number;
+  created_at: string;
+}
+
+/** The PR already opened for this analysis, or null. */
+export async function getPullRequest(id: string): Promise<PullRequestResult | null> {
+  if (IS_MOCK) return null;
+  const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/pull-request`);
+  if (res.status === 404) return null;
+  return handleResponse<PullRequestResult>(res);
+}
+
+/** Dry run: what the PR would contain, without contacting GitHub. */
+export async function previewPullRequest(id: string): Promise<PullRequestPlan> {
+  if (IS_MOCK) {
+    const res = await fetch("/fixtures/pull_request_plan.json");
+    return (await handleResponse<{ plan: PullRequestPlan }>(res)).plan;
+  }
+  const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/pull-request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dry_run: true }),
+  });
+  return (await handleResponse<{ plan: PullRequestPlan }>(res)).plan;
+}
+
+/** Opens the PR. The token is sent once in the request body; it is never stored by the UI or the server. */
+export async function createPullRequest(id: string, token: string, draft: boolean): Promise<PullRequestResult> {
+  if (IS_MOCK) throw new ApiRequestError("Pull requests are disabled in mock mode", "mock", 400);
+  const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/pull-request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, draft }),
+  });
+  return handleResponse<PullRequestResult>(res);
+}

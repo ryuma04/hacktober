@@ -87,3 +87,14 @@ def test_blast_radius_follows_imports_to_tests():
     assert [x["file"] for x in br["indirect"]] == ["minipkg/app.py"]
     assert br["tests"] == [{"file": "tests/test_app.py", "via": ["tests/test_app.py", "minipkg/app.py", "minipkg/core.py"]}]
     assert br["stats"]["test_files"] == 1 and br["stats"]["total_test_files"] == 2
+
+
+def test_namespace_package_folder_is_local(tmp_path):
+    """A src/ folder of .py files without __init__.py is project code, not an undeclared dependency."""
+    from app import pysrc
+    (tmp_path / "src" / "classes").mkdir(parents=True)
+    (tmp_path / "src" / "classes" / "YouTube.py").write_text("x = 1\n")
+    (tmp_path / "src" / "assets").mkdir()
+    (tmp_path / "src" / "assets" / "banner.txt").write_text("hi\n")
+    names = pysrc.local_packages(tmp_path)
+    assert "classes" in names and "assets" not in names
