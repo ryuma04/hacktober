@@ -15,9 +15,11 @@ import {
   Terminal,
   Cpu,
 } from "lucide-react";
+import { useAuth } from "@/components/AuthContext";
 
 export default function HomePage() {
   const router = useRouter();
+  const { user, logout, openAuthModal } = useAuth();
   const [repoUrl, setRepoUrl] = useState("https://github.com/rishrek/LinkWatch");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,6 +86,39 @@ export default function HomePage() {
           >
             Gemma Terms <ExternalLink className="w-3 h-3" />
           </a>
+          
+          {user ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-medium bg-white px-2.5 py-1 rounded-full border border-ink/20 text-ink">
+                {user.email}
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                className="text-xs font-medium text-ink/70 hover:text-danger px-2 py-1 rounded transition-colors"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openAuthModal("login")}
+                className="text-xs font-medium text-ink hover:text-ink/80 px-2.5 py-1 rounded-full transition-colors"
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                onClick={() => openAuthModal("register")}
+                className="text-xs font-medium bg-ink text-white px-3 py-1 rounded-full shadow-xs hover:bg-ink/90 active:scale-95 transition-all"
+              >
+                Register
+              </button>
+            </div>
+          )}
+
           <span className="font-mono text-xs bg-[#B9E4A1] text-[#17151F] px-2.5 py-1 rounded-full border border-[#17151F]/30 font-bold">
             v0.1.0
           </span>

@@ -18,7 +18,19 @@ func main() {
 			OnLine: func(jobID, runID, stream, line string) {
 				store.Emit(jobID, "sandbox_log", map[string]any{"run": runID, "stream": stream, "line": line})
 			}}}
-	api := &API{cfg: cfg, store: store, pipe: pipe}
+	var authDB *AuthDB
+	if cfg.DatabaseURL != "" {
+		db, err := InitAuthDB(cfg.DatabaseURL)
+		if err != nil {
+			log.Printf("[Neon DB Warning] Failed to connect: %v", err)
+		} else {
+			authDB = db
+		}
+	} else {
+		log.Printf("[Neon DB] DATABASE_URL not set; authentication endpoints will be inactive")
+	}
+
+	api := &API{cfg: cfg, store: store, pipe: pipe, authDB: authDB}
 
 	go func() { // pre-pull the sandbox image so the first analysis is fast
 		ctx := context.Background()

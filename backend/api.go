@@ -15,6 +15,7 @@ type API struct {
 	cfg    Config
 	store  *Store
 	pipe   *Pipeline
+	authDB *AuthDB
 	runJob func(id string)
 }
 
@@ -33,6 +34,11 @@ func writeErr(w http.ResponseWriter, code int, kind, msg string) {
 
 func (a *API) routes() http.Handler {
 	mux := http.NewServeMux()
+	// Auth routes (Neon PostgreSQL)
+	mux.HandleFunc("POST /api/auth/register", a.register)
+	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("GET /api/auth/me", a.me)
+
 	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("POST /api/analyses", a.create)
 	mux.HandleFunc("GET /api/analyses", a.list)

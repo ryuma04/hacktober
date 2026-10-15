@@ -14,6 +14,8 @@ type Config struct {
 	Root           string
 	Port           string
 	DataDir        string
+	DatabaseURL    string
+	JWTSecret      string
 	AIServiceURL   string
 	AllowedOrigins []string
 	SandboxImage   string
@@ -85,6 +87,8 @@ func loadConfig() Config {
 	}
 	return Config{
 		Root: root, Port: get("PORT", "8080"), DataDir: data,
+		DatabaseURL:    get("DATABASE_URL", ""),
+		JWTSecret:      get("JWT_SECRET", "default_jwt_secret_key_change_in_production"),
 		AIServiceURL:   strings.TrimRight(get("AI_SERVICE_URL", "http://localhost:8001"), "/"),
 		AllowedOrigins: origins, SandboxImage: get("SANDBOX_IMAGE", "python:3.12-slim"),
 		SandboxTimeout: timeout, DefaultRepoURL: get("DEFAULT_REPO_URL", "https://github.com/rishrek/LinkWatch"),

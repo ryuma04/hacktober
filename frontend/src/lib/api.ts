@@ -220,3 +220,39 @@ export async function createPullRequest(id: string, token: string, draft: boolea
   });
   return handleResponse<PullRequestResult>(res);
 }
+
+export interface User {
+  id: number;
+  email: string;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export async function registerUser(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${API}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return handleResponse<AuthResponse>(res);
+}
+
+export async function loginUser(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${API}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return handleResponse<AuthResponse>(res);
+}
+
+export async function getMe(token: string): Promise<User> {
+  const res = await fetch(`${API}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return handleResponse<User>(res);
+}

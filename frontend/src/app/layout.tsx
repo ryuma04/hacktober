@@ -20,6 +20,9 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
 });
 
+import { AuthProvider } from "@/components/AuthContext";
+import { AuthModal } from "@/components/AuthModal";
+
 export const metadata: Metadata = {
   title: "DepExit — Exit Risky Dependencies with Proof",
   description:
@@ -37,7 +40,10 @@ export default function RootLayout({
       className={`${bricolage.variable} ${outfit.variable} ${jetbrainsMono.variable} antialiased`}
     >
       <body className="min-h-screen text-ink flex flex-col selection:bg-butter selection:text-ink">
-        {children}
+        <AuthProvider>
+          {children}
+          <AuthModal />
+        </AuthProvider>
       </body>
     </html>
   );

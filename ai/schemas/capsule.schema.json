@@ -745,8 +745,8 @@
           "type": "string"
         },
         "confidence": {
-          "maximum": 1.0,
-          "minimum": 0.0,
+          "maximum": 1,
+          "minimum": 0,
           "title": "Confidence",
           "type": "number"
         },
@@ -1322,14 +1322,17 @@
       "type": "string"
     },
     "tool": {
+      "additionalProperties": true,
       "title": "Tool",
       "type": "object"
     },
     "target": {
+      "additionalProperties": true,
       "title": "Target",
       "type": "object"
     },
     "ai": {
+      "additionalProperties": true,
       "title": "Ai",
       "type": "object"
     },
@@ -1351,6 +1354,7 @@
       "type": "array"
     },
     "patch": {
+      "additionalProperties": true,
       "title": "Patch",
       "type": "object"
     },

@@ -15,7 +15,8 @@ Start-Process -FilePath "$root\ai\.venv\Scripts\python.exe" -ArgumentList "-m","
 Write-Host "AI service  -> http://localhost:8001/v1/health"
 
 # Go API
-Push-Location "$root\backend"; go build -o bin\depexit.exe .; Pop-Location
+$goExe = if (Get-Command go -ErrorAction SilentlyContinue) { "go" } elseif (Test-Path "$env:USERPROFILE\go\bin\go.exe") { "$env:USERPROFILE\go\bin\go.exe" } else { "go" }
+Push-Location "$root\backend"; & $goExe build -o bin\depexit.exe .; Pop-Location
 Start-Process -FilePath "$root\backend\bin\depexit.exe" -WorkingDirectory "$root" -WindowStyle Minimized
 Write-Host "Go API      -> http://localhost:8080/api/health"
 
