@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config is read from the process environment overlaid on the repo-root .env file.
@@ -19,6 +20,9 @@ type Config struct {
 	SandboxTimeout int
 	DefaultRepoURL string
 	PythonVersion  string
+	// DemoStageDelay pauses each analysis stage (not the Docker runs) before it works, so a presenter can narrate a
+	// fully cached run. 0 = off. Stage durations exclude the pause.
+	DemoStageDelay time.Duration
 }
 
 func findRoot() string {
@@ -85,5 +89,12 @@ func loadConfig() Config {
 		AllowedOrigins: origins, SandboxImage: get("SANDBOX_IMAGE", "python:3.12-slim"),
 		SandboxTimeout: timeout, DefaultRepoURL: get("DEFAULT_REPO_URL", "https://github.com/rishrek/LinkWatch"),
 		PythonVersion: get("PYTHON_VERSION", "3.12"),
+		DemoStageDelay: func() time.Duration {
+			s, _ := strconv.ParseFloat(get("DEMO_STAGE_DELAY_S", "0"), 64)
+			if s < 0 || s > 30 {
+				s = 0
+			}
+			return time.Duration(s * float64(time.Second))
+		}(),
 	}
 }

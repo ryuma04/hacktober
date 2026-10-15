@@ -98,6 +98,11 @@ Follow progress at `GET /api/analyses/{id}/events` (SSE) and fetch `GET /api/ana
 Everything for a run lives in `data/<id>/` (stage JSON files, `patch.diff`, `runs/*/install.log|test.log|junit.xml`,
 `ai/*.txt` prompts and replies).
 
+### Presenting a cached run
+With cached AI answers an analysis finishes in about two minutes, most of it real Docker time. For a live walkthrough,
+set `DEMO_STAGE_DELAY_S=3` in `.env`: every analysis stage stays visibly "running" for 3 s before it works, so each
+step can be explained. Docker stages are never paced, and recorded stage durations exclude the pause.
+
 ## Architecture
 | Component | Port | Role |
 |---|---|---|

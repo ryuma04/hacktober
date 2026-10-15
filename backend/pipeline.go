@@ -59,6 +59,12 @@ func (p *Pipeline) logf(id, stage, level, format string, args ...any) {
 func (p *Pipeline) stage(id, name string, errs map[string]string, mu *sync.Mutex, fn func() (map[string]any, error)) error {
 	p.setStage(id, name, "running", "")
 	p.store.Emit(id, "stage_started", map[string]any{"stage": name})
+	if d := p.cfg.DemoStageDelay; d > 0 && !strings.HasPrefix(name, "sandbox_") {
+		// demo pacing: keep the stage visibly "running" so it can be explained, then restart its clock so the
+		// recorded duration is the real work only (the Docker stages are slow and real, so they are not paced)
+		time.Sleep(d)
+		p.setStage(id, name, "running", "")
+	}
 	stats, err := fn()
 	if err != nil {
 		p.setStage(id, name, "failed", err.Error())
