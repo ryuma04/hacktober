@@ -53,10 +53,41 @@ type Job struct {
 	Options    Options         `json:"options"`
 }
 
-// Event is one SSE message; Data is merged with seq/ts/stage when serialised.
+// Event is one SSE message; Data contains seq/ts/stage/message etc.
 type Event struct {
 	Type string         `json:"event"`
-	Data map[string]any `json:"data"`
+	Data map[string]any `json:"data,omitempty"`
+}
+
+func (e *Event) UnmarshalJSON(b []byte) error {
+	var raw map[string]any
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if typ, ok := raw["event"].(string); ok {
+		e.Type = typ
+	}
+	if data, ok := raw["data"].(map[string]any); ok {
+		e.Data = data
+	} else {
+		dataCopy := make(map[string]any)
+		for k, v := range raw {
+			if k != "event" {
+				dataCopy[k] = v
+			}
+		}
+		e.Data = dataCopy
+	}
+	return nil
+}
+
+func (e Event) MarshalJSON() ([]byte, error) {
+	out := make(map[string]any)
+	for k, v := range e.Data {
+		out[k] = v
+	}
+	out["event"] = e.Type
+	return json.Marshal(out)
 }
 
 type jobState struct {

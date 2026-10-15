@@ -12,9 +12,10 @@ import (
 )
 
 type API struct {
-	cfg   Config
-	store *Store
-	pipe  *Pipeline
+	cfg    Config
+	store  *Store
+	pipe   *Pipeline
+	runJob func(id string)
 }
 
 var repoURLRe = regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?(\.git)?/?$`)
@@ -106,7 +107,11 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		body.Ref = "main"
 	}
 	j := a.store.Create(strings.TrimSuffix(body.RepoURL, "/"), body.Ref, body.Options)
-	go a.pipe.Run(j.ID)
+	if a.runJob != nil {
+		go a.runJob(j.ID)
+	} else if a.pipe != nil {
+		go a.pipe.Run(j.ID)
+	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"id": j.ID, "status": j.Status, "created_at": j.CreatedAt,
 		"links": map[string]string{"self": "/api/analyses/" + j.ID, "events": "/api/analyses/" + j.ID + "/events"}})
 }

@@ -65,6 +65,21 @@ func installFiles(repo string) []string {
 
 func shQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'" }
 
+func buildInstallCommand(repoDir string) string {
+	files := installFiles(repoDir)
+	var reqArgs []string
+	for _, f := range files {
+		reqArgs = append(reqArgs, "-r", shQuote(f))
+	}
+	pipCmd := ""
+	if len(reqArgs) > 0 {
+		pipCmd = "/venv/bin/pip install -q --disable-pip-version-check --no-input " + strings.Join(reqArgs, " ") + " && "
+	} else if fileExists(filepath.Join(repoDir, "pyproject.toml")) || fileExists(filepath.Join(repoDir, "setup.py")) {
+		pipCmd = "/venv/bin/pip install -q --disable-pip-version-check --no-input . && "
+	}
+	return "python -m venv /venv && " + pipCmd + "(/venv/bin/python -c 'import pytest' 2>/dev/null || /venv/bin/pip install -q pytest)"
+}
+
 // dockerRun runs one container; on timeout it kills the container by name.
 func (sb *Sandbox) dockerRun(ctx context.Context, name string, args []string, logPath string) (int, error) {
 	f, err := os.Create(logPath)
@@ -114,12 +129,7 @@ func (sb *Sandbox) Run(ctx context.Context, jobID, runID, kind, repoDir, runDir 
 	common := []string{"--memory", "2g", "--cpus", "2", "--pids-limit", "512", "--security-opt", "no-new-privileges",
 		"--mount", "type=bind,source=" + absRepo + ",target=/work", "-v", volume + ":/venv", "-w", "/work"}
 
-	var reqArgs []string
-	for _, f := range installFiles(repoDir) {
-		reqArgs = append(reqArgs, "-r", shQuote(f))
-	}
-	install := "python -m venv /venv && /venv/bin/pip install -q --disable-pip-version-check --no-input " + strings.Join(reqArgs, " ") +
-		" && (/venv/bin/python -c 'import pytest' 2>/dev/null || /venv/bin/pip install -q pytest)"
+	install := buildInstallCommand(repoDir)
 	res.InstallCommand = []string{"sh", "-c", install}
 	name := fmt.Sprintf("dx-%s-%s-install", jobID, runID)
 	args := append([]string{"run", "--rm", "--name", name}, common...)

@@ -226,33 +226,30 @@ export function useAnalysis(id: string) {
 
     async function run() {
       try {
-        if (IS_MOCK) {
-          // If mock failed job
-          if (id === "dx_fail01") {
-            const failJob = await getJob("dx_fail01");
-            if (!isCancelled) {
-              setJob(failJob);
-              if (failJob.stages) setStages(failJob.stages);
-              setError(failJob.error || "clone failed: repository not found");
-              setLoading(false);
-            }
-            return;
+        if (id === "dx_fail01") {
+          const failJob = await getJob("dx_fail01");
+          if (!isCancelled) {
+            setJob(failJob);
+            if (failJob.stages) setStages(failJob.stages);
+            setError(failJob.error || "clone failed: repository not found");
+            setLoading(false);
           }
+          return;
+        }
 
-          // If id === "dx_demo00" or already completed, check if direct load
-          if (id === "dx_demo00") {
-            const completedJob = await getJob("dx_demo01");
-            if (!isCancelled) {
-              setJob({ ...completedJob, id: "dx_demo00", status: "completed_with_errors" });
-              if (completedJob.stages) setStages(completedJob.stages);
-              const cap = await getCapsule(id);
-              setCapsule(cap);
-              setLoading(false);
-            }
-            return;
+        if (id === "dx_demo00") {
+          const completedJob = await getJob("dx_demo01");
+          if (!isCancelled) {
+            setJob({ ...completedJob, id: "dx_demo00", status: "completed_with_errors" });
+            if (completedJob.stages) setStages(completedJob.stages);
+            const cap = await getCapsule(id);
+            setCapsule(cap);
+            setLoading(false);
           }
+          return;
+        }
 
-          // Otherwise mock replay events.ndjson every 400ms
+        if (id === "dx_demo01" && IS_MOCK) {
           setIsReplaying(true);
           const res = await fetch("/fixtures/events.ndjson");
           const text = await res.text();

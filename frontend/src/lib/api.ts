@@ -58,10 +58,6 @@ export async function createAnalysis(
   ref: string = "main",
   options?: { isolated_runs?: boolean; repair?: boolean; max_dependencies?: number }
 ): Promise<CreateAnalysisResponse> {
-  if (IS_MOCK) {
-    const res = await fetch("/fixtures/created.json");
-    return handleResponse<CreateAnalysisResponse>(res);
-  }
   const res = await fetch(`${API}/api/analyses`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -71,58 +67,79 @@ export async function createAnalysis(
 }
 
 export async function getJob(id: string): Promise<Job> {
-  if (IS_MOCK) {
-    if (id === "dx_fail01") {
-      const res = await fetch("/fixtures/job_failed.json");
-      return handleResponse<Job>(res);
-    }
+  if (id === "dx_fail01") {
+    const res = await fetch("/fixtures/job_failed.json");
+    return handleResponse<Job>(res);
+  }
+  if (id === "dx_demo01" && IS_MOCK) {
     const res = await fetch("/fixtures/job_completed.json");
     return handleResponse<Job>(res);
   }
-  const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}`);
-  return handleResponse<Job>(res);
+  try {
+    const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}`);
+    return await handleResponse<Job>(res);
+  } catch (err) {
+    if (id === "dx_demo01") {
+      const res = await fetch("/fixtures/job_completed.json");
+      return handleResponse<Job>(res);
+    }
+    throw err;
+  }
 }
 
 export async function getCapsule(id: string): Promise<Capsule> {
-  if (IS_MOCK) {
+  if (id === "dx_demo01" && IS_MOCK) {
     const res = await fetch("/fixtures/capsule.json");
     return handleResponse<Capsule>(res);
   }
-  const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/capsule`);
-  return handleResponse<Capsule>(res);
+  try {
+    const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/capsule`);
+    return await handleResponse<Capsule>(res);
+  } catch (err) {
+    if (id === "dx_demo01") {
+      const res = await fetch("/fixtures/capsule.json");
+      return handleResponse<Capsule>(res);
+    }
+    throw err;
+  }
 }
 
 export async function getCapsuleMd(id: string): Promise<string> {
-  if (IS_MOCK) {
+  try {
+    const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/capsule.md`);
+    if (res.ok) return await res.text();
+  } catch {}
+  if (id === "dx_demo01" || IS_MOCK) {
     const res = await fetch("/fixtures/capsule.md");
     if (!res.ok) throw new ApiRequestError("Failed to fetch capsule markdown", "fetch_error", res.status);
     return res.text();
   }
-  const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/capsule.md`);
-  if (!res.ok) throw new ApiRequestError("Failed to fetch capsule markdown", "fetch_error", res.status);
-  return res.text();
+  throw new ApiRequestError("Failed to fetch capsule markdown", "fetch_error", 404);
 }
 
 export async function getPatch(id: string): Promise<string> {
-  if (IS_MOCK) {
+  try {
+    const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/patch.diff`);
+    if (res.ok) return await res.text();
+  } catch {}
+  if (id === "dx_demo01" || IS_MOCK) {
     const res = await fetch("/fixtures/patch.diff");
     if (!res.ok) throw new ApiRequestError("Failed to fetch patch", "fetch_error", res.status);
     return res.text();
   }
-  const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/patch.diff`);
-  if (!res.ok) throw new ApiRequestError("Failed to fetch patch", "fetch_error", res.status);
-  return res.text();
+  throw new ApiRequestError("Failed to fetch patch", "fetch_error", 404);
 }
 
 export async function getLog(id: string, run: string, stream: "install" | "test"): Promise<string> {
-  if (IS_MOCK) {
+  try {
+    const res = await fetch(
+      `${API}/api/analyses/${encodeURIComponent(id)}/runs/${encodeURIComponent(run)}/log?stream=${stream}`
+    );
+    if (res.ok) return await res.text();
+  } catch {}
+  if (id === "dx_demo01" || IS_MOCK) {
     const res = await fetch(`/fixtures/logs/${run}-${stream}.log`);
-    if (!res.ok) throw new ApiRequestError(`Log not found for ${run} (${stream})`, "not_found", res.status);
-    return res.text();
+    if (res.ok) return await res.text();
   }
-  const res = await fetch(
-    `${API}/api/analyses/${encodeURIComponent(id)}/runs/${encodeURIComponent(run)}/log?stream=${stream}`
-  );
-  if (!res.ok) throw new ApiRequestError(`Log not found for ${run} (${stream})`, "not_found", res.status);
-  return res.text();
+  throw new ApiRequestError(`Log not found for ${run} (${stream})`, "not_found", 404);
 }

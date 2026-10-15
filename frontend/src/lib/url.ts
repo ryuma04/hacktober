@@ -1,5 +1,5 @@
 export const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-export const IS_MOCK = process.env.NEXT_PUBLIC_MOCK !== "0";
+export const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "1";
 
 export const apiUrl = (u: string): string => {
   if (!u) return "";
