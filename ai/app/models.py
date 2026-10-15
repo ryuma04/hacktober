@@ -55,6 +55,47 @@ class Usage(BaseModel):
     summary_provenance: Literal["ai", "derived"]
 
 
+class BlastLine(BaseModel):
+    line: int
+    kinds: list[str]
+    code: str
+
+
+class BlastFile(BaseModel):
+    file: str
+    lines: list[BlastLine]
+
+
+class BlastPath(BaseModel):
+    file: str
+    via: list[str]  # import chain from this file down to the directly affected file
+
+
+class BlastNode(BaseModel):
+    id: str
+    type: Literal["dependency", "module", "test"]
+    label: str
+    impact: Literal["direct", "indirect"] | None = None
+    lines: int | None = None
+
+
+class BlastEdge(BaseModel):
+    model_config = {"populate_by_name": True}
+    from_: str = Field(alias="from")
+    to: str
+    kind: Literal["uses", "imports", "conftest"]
+
+
+class BlastRadius(BaseModel):
+    direct: list[BlastFile]
+    indirect: list[BlastPath]
+    tests: list[BlastPath]
+    nodes: list[BlastNode]
+    edges: list[BlastEdge]
+    stats: dict[str, int]
+    provenance: Literal["evidence"]
+
+
 class Alt(BaseModel):
     package: str
     reason_rejected: str
@@ -121,6 +162,7 @@ class Dependency(BaseModel):
     homepage: str | None = None
     risk: Risk
     usage: Usage
+    blast_radius: BlastRadius | None = None
     replacement: Replacement | None = None
     migration: Migration | None = None
     suggested_tests: list[SuggestedTest]

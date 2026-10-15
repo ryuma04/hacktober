@@ -108,6 +108,20 @@ Sections in **exactly this order** (they match the problem statement):
 9. **Open concerns:** bullets with ProvenanceTag.
 If any optional field is missing (`replacement`, `migration`, `test_results`), show "Not applicable" in muted text. Never crash.
 
+### 7.5 Sandbox terminals (live telemetry)
+- Two dark terminal panes side by side: **Baseline (original deps)** | **Migrated (replacements)**. Each has tabs `install` / `test` (auto-switch to `test` when its first line arrives).
+- Feed: `sandbox_log` events (`run`, `stream`, `line`), deduped by `seq`, appended in order, autoscroll, monospace 12px. Colour lines containing `PASSED` mint, `FAILED`/`ERROR` coral/danger, `exit code: 0` mint, other exit codes danger; lines starting with `$` muted bold.
+- Show on the running view (under the stage timeline) and keep it on the capsule view (collapsed by default). For finished jobs the events replay from the start, so the panes fill instantly.
+- Empty state: "Waiting for Docker…" (the migrated pane fills only after `materialize`; say so).
+- Mock: `fixtures/events.ndjson` contains `sandbox_log` lines.
+
+### 7.6 Blast radius (per dependency)
+- In DependencyDetail, a new section **Blast radius** right after **Usage locations**: headline from `stats`: "`lines` lines in `direct_files` files use it · `indirect_files` modules import those · `test_files`/`total_test_files` test files reach it".
+- Graph: render `nodes`/`edges` as 3 columns, left to right: dependency (coral) → direct modules (butter, show line count) → indirect modules (sky) → tests (mint). Draw `edges` as lines (SVG); `kind: conftest` edges dashed. A clean Tailwind column layout with connector lines is enough; no graph library required.
+- Below: per direct file, the exact lines (`line`, `kinds` chips, `code` mono); per indirect file/test, the `via` chain as `a → b → c` CodeChips. `provenance` is always evidence (mint "Evidence" tag).
+- Optional: a capsule-level "Blast map" card listing the top 5 dependencies by `stats.test_files` then `stats.lines`.
+- `blast_radius` is `null` for dependencies that are not imported (e.g. unused ones) — show "Not imported anywhere".
+
 ## 8. Shared components
 | Component | Spec |
 |---|---|

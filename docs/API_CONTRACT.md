@@ -95,7 +95,14 @@ data: {"seq":20,"ts":"…","stage":"sandbox_migrated","error":"install timeout a
 event: job_completed
 data: {"seq":40,"ts":"…","status":"completed","summary":{…CapsuleSummary}}
 ```
-Event types: `job_started`, `stage_started`, `stage_completed`, `stage_failed`, `stage_skipped`, `log`, `ai_call` (`{stage, purpose, model, latency_ms, ok}`), `job_completed`, `job_failed`.
+Event types: `job_started`, `stage_started`, `stage_completed`, `stage_failed`, `stage_skipped`, `log`, `ai_call` (`{stage, purpose, model, latency_ms, ok}`), `sandbox_log`, `job_completed`, `job_failed`.
+
+**`sandbox_log`** — live Docker output, one event per line (max 400 lines per run+stream; the full log is at `runs/{run}/log`):
+```
+event: sandbox_log
+data: {"seq":31,"ts":"…","run":"baseline","stream":"test","line":"tests/test_config.py::test_sites_file_loads PASSED [ 90%]"}
+```
+`run` is `baseline` | `migrated`; `stream` is `install` (pip, network on) | `test` (pytest -v, network off). The first line of each stream is the command (`$ …`); the last is `exit code: N`. The baseline run starts right after `clone` (in parallel with the analysis); the migrated run starts after `materialize`.
 UI fallback if SSE breaks: poll `GET /api/analyses/{id}` every 2 s.
 
 ## 3. Status codes summary
@@ -129,6 +136,16 @@ interface UsageLocation { file: string; line: number; col?: number; code: string
   kind: "import" | "from_import" | "call" | "attribute" | "private_api" | "monkeypatch" | "subclass" | "decorator";
   symbol?: string; }
 
+interface BlastRadius {               // computed from the AST + the project's own import graph (evidence)
+  direct: { file: string; lines: { line: number; kinds: UsageLocation["kind"][]; code: string }[] }[];
+  indirect: { file: string; via: string[] }[];  // project modules that import affected code; via = import chain down to the direct file
+  tests: { file: string; via: string[] }[];     // test files that reach it (directly, via imports, or via conftest.py)
+  nodes: { id: string; type: "dependency" | "module" | "test"; label: string; impact?: "direct" | "indirect"; lines?: number }[];
+  edges: { from: string; to: string; kind: "uses" | "imports" | "conftest" }[];  // from depends on to; dependency node id = "dep:<name>"
+  stats: { direct_files: number; lines: number; indirect_files: number; test_files: number; total_test_files: number };
+  provenance: "evidence";
+}
+
 interface Dependency {
   name: string;                       // normalized (PEP 503)
   import_names: string[];             // e.g. ["jinja2"]
@@ -139,10 +156,12 @@ interface Dependency {
           rationale: string; rationale_provenance: "ai" | "derived"; };
   usage: { locations: UsageLocation[]; files: string[]; summary: string;
            summary_provenance: "ai" | "derived"; };
+  blast_radius?: BlastRadius | null;   // null when the dependency is not imported anywhere
   replacement?: { strategy: Strategy; package?: string; version_spec?: string;
                   rationale: string; confidence: number /*0-1*/;
                   alternatives: { package: string; reason_rejected: string }[];
-                  provenance: "ai" | "derived"; };
+                  provenance: "ai" | "derived";
+                  model?: string | null; };  // model that made the decision (gemma-4-…, or a disclosed fallback)
   migration?: { steps: string[]; files_changed: string[]; applied: boolean;
                 not_applied_reason?: string; provenance: "ai"; };
   suggested_tests: { name: string; purpose: string; code?: string; provenance: "ai" }[];

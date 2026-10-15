@@ -18,6 +18,220 @@
       "title": "Alt",
       "type": "object"
     },
+    "BlastEdge": {
+      "properties": {
+        "from": {
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "title": "To",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "uses",
+            "imports",
+            "conftest"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "kind"
+      ],
+      "title": "BlastEdge",
+      "type": "object"
+    },
+    "BlastFile": {
+      "properties": {
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "lines": {
+          "items": {
+            "$ref": "#/$defs/BlastLine"
+          },
+          "title": "Lines",
+          "type": "array"
+        }
+      },
+      "required": [
+        "file",
+        "lines"
+      ],
+      "title": "BlastFile",
+      "type": "object"
+    },
+    "BlastLine": {
+      "properties": {
+        "line": {
+          "title": "Line",
+          "type": "integer"
+        },
+        "kinds": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Kinds",
+          "type": "array"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "line",
+        "kinds",
+        "code"
+      ],
+      "title": "BlastLine",
+      "type": "object"
+    },
+    "BlastNode": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "dependency",
+            "module",
+            "test"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "impact": {
+          "anyOf": [
+            {
+              "enum": [
+                "direct",
+                "indirect"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Impact"
+        },
+        "lines": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lines"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "label"
+      ],
+      "title": "BlastNode",
+      "type": "object"
+    },
+    "BlastPath": {
+      "properties": {
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "via": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Via",
+          "type": "array"
+        }
+      },
+      "required": [
+        "file",
+        "via"
+      ],
+      "title": "BlastPath",
+      "type": "object"
+    },
+    "BlastRadius": {
+      "properties": {
+        "direct": {
+          "items": {
+            "$ref": "#/$defs/BlastFile"
+          },
+          "title": "Direct",
+          "type": "array"
+        },
+        "indirect": {
+          "items": {
+            "$ref": "#/$defs/BlastPath"
+          },
+          "title": "Indirect",
+          "type": "array"
+        },
+        "tests": {
+          "items": {
+            "$ref": "#/$defs/BlastPath"
+          },
+          "title": "Tests",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/BlastNode"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/BlastEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "stats": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Stats",
+          "type": "object"
+        },
+        "provenance": {
+          "const": "evidence",
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "direct",
+        "indirect",
+        "tests",
+        "nodes",
+        "edges",
+        "stats",
+        "provenance"
+      ],
+      "title": "BlastRadius",
+      "type": "object"
+    },
     "Concern": {
       "properties": {
         "text": {
@@ -160,6 +374,17 @@
         },
         "usage": {
           "$ref": "#/$defs/Usage"
+        },
+        "blast_radius": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlastRadius"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "replacement": {
           "anyOf": [

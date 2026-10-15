@@ -33,6 +33,56 @@ type RunResult struct {
 type Sandbox struct {
 	Image   string
 	Timeout time.Duration
+	// OnLine, if set, receives every output line of a sandbox container (live telemetry over SSE).
+	OnLine func(jobID, runID, stream, line string)
+}
+
+// MaxLiveLines caps how many lines per stream are streamed live; the log file always has everything.
+const MaxLiveLines = 400
+
+// lineWriter tees container output to the log file and emits it line by line.
+type lineWriter struct {
+	file    io.Writer
+	emit    func(string)
+	buf     []byte
+	emitted int
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	if _, err := w.file.Write(p); err != nil {
+		return 0, err
+	}
+	if w.emit == nil {
+		return len(p), nil
+	}
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		w.send(string(w.buf[:i]))
+		w.buf = w.buf[i+1:]
+	}
+	return len(p), nil
+}
+
+func (w *lineWriter) send(line string) {
+	line = strings.TrimRight(line, "\r")
+	if w.emitted == MaxLiveLines {
+		w.emit(fmt.Sprintf("[depexit] live view truncated after %d lines; the full log is in the run's log file", MaxLiveLines))
+	}
+	w.emitted++
+	if w.emitted <= MaxLiveLines {
+		w.emit(line)
+	}
+}
+
+func (w *lineWriter) flush() {
+	if len(w.buf) > 0 && w.emit != nil {
+		w.send(string(w.buf))
+		w.buf = nil
+	}
 }
 
 func dockerAvailable(ctx context.Context) bool {
@@ -73,29 +123,31 @@ func buildInstallCommand(repoDir string) string {
 	}
 	pipCmd := ""
 	if len(reqArgs) > 0 {
-		pipCmd = "/venv/bin/pip install -q --disable-pip-version-check --no-input " + strings.Join(reqArgs, " ") + " && "
+		pipCmd = "/venv/bin/pip install --progress-bar off --disable-pip-version-check --no-input " + strings.Join(reqArgs, " ") + " && "
 	} else if fileExists(filepath.Join(repoDir, "pyproject.toml")) || fileExists(filepath.Join(repoDir, "setup.py")) {
-		pipCmd = "/venv/bin/pip install -q --disable-pip-version-check --no-input . && "
+		pipCmd = "/venv/bin/pip install --progress-bar off --disable-pip-version-check --no-input . && "
 	}
 	return "python -m venv /venv && " + pipCmd + "(/venv/bin/python -c 'import pytest' 2>/dev/null || /venv/bin/pip install -q pytest)"
 }
 
 // dockerRun runs one container; on timeout it kills the container by name.
-func (sb *Sandbox) dockerRun(ctx context.Context, name string, args []string, logPath string) (int, error) {
+func (sb *Sandbox) dockerRun(ctx context.Context, name string, args []string, logPath string, emit func(string)) (int, error) {
 	f, err := os.Create(logPath)
 	if err != nil {
 		return -1, err
 	}
 	defer f.Close()
+	out := &lineWriter{file: f, emit: emit}
+	defer out.flush()
 	fmt.Fprintf(f, "$ docker %s\n", strings.Join(args, " "))
 	ctx, cancel := context.WithTimeout(ctx, sb.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Stdout, cmd.Stderr = f, f
+	cmd.Stdout, cmd.Stderr = out, out
 	err = cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {
 		_ = exec.Command("docker", "kill", name).Run()
-		fmt.Fprintf(f, "\n[depexit] timed out after %s\n", sb.Timeout)
+		fmt.Fprintf(out, "\n[depexit] timed out after %s\n", sb.Timeout)
 		return -1, ctx.Err()
 	}
 	code := 0
@@ -103,11 +155,11 @@ func (sb *Sandbox) dockerRun(ctx context.Context, name string, args []string, lo
 		if ee, ok := err.(*exec.ExitError); ok {
 			code = ee.ExitCode()
 		} else {
-			fmt.Fprintf(f, "\n[depexit] could not start docker: %v\n", err)
+			fmt.Fprintf(out, "\n[depexit] could not start docker: %v\n", err)
 			return -1, err
 		}
 	}
-	fmt.Fprintf(f, "\nexit code: %d\n", code)
+	fmt.Fprintf(out, "exit code: %d\n", code)
 	return code, nil
 }
 
@@ -129,12 +181,21 @@ func (sb *Sandbox) Run(ctx context.Context, jobID, runID, kind, repoDir, runDir 
 	common := []string{"--memory", "2g", "--cpus", "2", "--pids-limit", "512", "--security-opt", "no-new-privileges",
 		"--mount", "type=bind,source=" + absRepo + ",target=/work", "-v", volume + ":/venv", "-w", "/work"}
 
+	emitFor := func(stream string) func(string) {
+		if sb.OnLine == nil {
+			return nil
+		}
+		return func(line string) { sb.OnLine(jobID, runID, stream, line) }
+	}
 	install := buildInstallCommand(repoDir)
 	res.InstallCommand = []string{"sh", "-c", install}
 	name := fmt.Sprintf("dx-%s-%s-install", jobID, runID)
 	args := append([]string{"run", "--rm", "--name", name}, common...)
 	args = append(args, sb.Image, "sh", "-c", install)
-	code, err := sb.dockerRun(ctx, name, args, filepath.Join(runDir, "install.log"))
+	if e := emitFor("install"); e != nil {
+		e("$ " + install)
+	}
+	code, err := sb.dockerRun(ctx, name, args, filepath.Join(runDir, "install.log"), emitFor("install"))
 	installCode := code
 	res.InstallExitCode = &installCode
 	if err == context.DeadlineExceeded {
@@ -151,13 +212,16 @@ func (sb *Sandbox) Run(ctx context.Context, jobID, runID, kind, repoDir, runDir 
 		return finish()
 	}
 
-	test := []string{"/venv/bin/python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "-o", "addopts=",
+	test := []string{"/venv/bin/python", "-m", "pytest", "-v", "-p", "no:cacheprovider", "-o", "addopts=",
 		"--junitxml=.depexit/junit.xml"}
 	res.Command = test
 	name = fmt.Sprintf("dx-%s-%s-test", jobID, runID)
 	args = append([]string{"run", "--rm", "--name", name, "--network", "none"}, common...)
 	args = append(args, sb.Image, "sh", "-c", "mkdir -p .depexit && "+strings.Join(test, " "))
-	code, err = sb.dockerRun(ctx, name, args, filepath.Join(runDir, "test.log"))
+	if e := emitFor("test"); e != nil {
+		e("$ " + strings.Join(test, " ") + "   (network disabled)")
+	}
+	code, err = sb.dockerRun(ctx, name, args, filepath.Join(runDir, "test.log"), emitFor("test"))
 	testCode := code
 	res.TestExitCode = &testCode
 	copyFile(filepath.Join(repoDir, ".depexit", "junit.xml"), filepath.Join(runDir, "junit.xml"))

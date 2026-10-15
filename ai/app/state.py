@@ -43,5 +43,6 @@ def merged_dependencies(job_dir: Path) -> list[dict]:
         d["risk"]["score"], d["risk"]["level"] = risk.score(inds)
         d["usage"] = (usage.get("usage") or {}).get(d["name"], {"locations": [], "files": [], "summary": "",
                                                                  "summary_provenance": "derived"})
+        d["blast_radius"] = (usage.get("blast_radius") or {}).get(d["name"])
     deps.sort(key=lambda d: -d["risk"]["score"])
     return deps

@@ -236,6 +236,12 @@ func (p *Pipeline) analysisStages(ctx context.Context, id string, base map[strin
 				p.logf(id, "usage", "warn", "%s: %v", dep, im["detail"])
 			}
 		}
+		blast, _ := o["blast_radius"].(map[string]any)
+		for dep, s := range blast {
+			st, _ := s.(map[string]any)
+			p.logf(id, "usage", "info", "blast radius %s: %v line(s) in %v file(s), +%v importing module(s), %v/%v test files reach it",
+				dep, st["lines"], st["direct_files"], st["indirect_files"], st["test_files"], st["total_test_files"])
+		}
 		return map[string]any{"dependencies": o["dependencies"]}
 	})
 	if usageErr != nil {

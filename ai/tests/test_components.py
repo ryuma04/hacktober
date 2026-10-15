@@ -111,7 +111,7 @@ def test_deterministic_fallback_when_gemma_offline(monkeypatch):
         raise GemmaUnavailable("Simulated quota exhaustion or offline mode")
 
     monkeypatch.setattr(gemma, "generate", mock_offline)
-    monkeypatch.setattr(gemma, "_grok_or_raise", mock_offline)  # every tier of the provider chain is offline
+    monkeypatch.setattr(gemma, "_compat_or_raise", mock_offline)  # every tier of the provider chain is offline
     monkeypatch.setenv("GEMMA_CACHE", "0")
 
     # Calling complete_json should return None and log one failed call per provider tier tried

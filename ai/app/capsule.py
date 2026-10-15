@@ -98,6 +98,7 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
                                      "latest_release_date", "last_release_of_pinned", "requires_python", "homepage")},
             "risk": d["risk"],
             "usage": d["usage"],
+            "blast_radius": d.get("blast_radius"),
             "replacement": None if not p else {
                 "strategy": p["strategy"], "package": p.get("package"), "version_spec": p.get("version_spec"),
                 "rationale": p["rationale"], "confidence": float(p.get("confidence", 0.5)),
@@ -237,6 +238,14 @@ def render_md(c: dict) -> str:
             L.append(f"- **{i['code']}** ({i['severity']}): {i['detail']} — evidence: {ev}")
         L += ["", "### Usage locations", f"{d['usage']['summary']}{_prov(d['usage']['summary_provenance'])}", ""]
         L += [f"- `{l['file']}:{l['line']}` [{l['kind']}] `{l['code']}`" for l in d["usage"]["locations"][:30]] or ["- (not imported)"]
+        br = d.get("blast_radius")
+        if br:
+            st = br["stats"]
+            L += ["", "### Blast radius",
+                  f"{st['lines']} line(s) in {st['direct_files']} file(s) use it directly; {st['indirect_files']} more "
+                  f"module(s) import those; {st['test_files']} of {st['total_test_files']} test file(s) reach it."]
+            L += [f"- indirect: `{x['file']}` via " + " → ".join(f"`{v}`" for v in x["via"][1:]) for x in br["indirect"]]
+            L += [f"- test: `{x['file']}` via " + " → ".join(f"`{v}`" for v in x["via"][1:]) for x in br["tests"]]
         L += ["", "### Proposed replacement",
               f"**{r.get('strategy')}** {r.get('package') or ''} {r.get('version_spec') or ''} "
               f"(confidence {r.get('confidence')}){_prov(r.get('provenance', ''))}", "", r.get("rationale", "")]

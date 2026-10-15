@@ -14,7 +14,10 @@ func main() {
 	cfg := loadConfig()
 	store := NewStore(cfg.DataDir)
 	pipe := &Pipeline{cfg: cfg, store: store, ai: NewAIClient(cfg.AIServiceURL),
-		sb: &Sandbox{Image: cfg.SandboxImage, Timeout: time.Duration(cfg.SandboxTimeout) * time.Second}}
+		sb: &Sandbox{Image: cfg.SandboxImage, Timeout: time.Duration(cfg.SandboxTimeout) * time.Second,
+			OnLine: func(jobID, runID, stream, line string) {
+				store.Emit(jobID, "sandbox_log", map[string]any{"run": runID, "stream": stream, "line": line})
+			}}}
 	api := &API{cfg: cfg, store: store, pipe: pipe}
 
 	go func() { // pre-pull the sandbox image so the first analysis is fast

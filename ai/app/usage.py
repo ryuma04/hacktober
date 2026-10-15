@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from . import gemma, knowledge, prompts, pysrc
+from . import blast, gemma, knowledge, prompts, pysrc
 
 
 def _root_name(node: ast.AST) -> str | None:
@@ -186,4 +186,4 @@ async def run(repo: Path, scan: dict, py: str, log: gemma.CallLog) -> dict:
         if not u["summary"]:
             u["summary"] = (f"Used in {len(u['files'])} file(s): {', '.join(u['files'][:4])}."
                             if u["locations"] else "Not imported anywhere in the code.")
-    return {"usage": usage, "extra_indicators": extra}
+    return {"usage": usage, "extra_indicators": extra, "blast_radius": blast.compute(repo, usage)}

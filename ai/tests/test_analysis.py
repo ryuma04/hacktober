@@ -75,3 +75,15 @@ def test_key_pool_escalates_repeated_429_to_daily(monkeypatch):
     assert pool.soonest_available() is None and pool.status()["exhausted"]
     pool.succeeded("k-aaaa")
     assert pool._state["k-aaaa"].strikes == 0
+
+
+def test_blast_radius_follows_imports_to_tests():
+    from app import blast
+    usage_out = {"oldlib": {"locations": [{"file": "minipkg/core.py", "line": 3, "kind": "import", "code": "import oldlib"},
+                                          {"file": "minipkg/core.py", "line": 3, "kind": "call", "code": "import oldlib"}]}}
+    br = blast.compute(REPO, usage_out)["oldlib"]
+    assert br["direct"] == [{"file": "minipkg/core.py",
+                             "lines": [{"line": 3, "kinds": ["import", "call"], "code": "import oldlib"}]}]
+    assert [x["file"] for x in br["indirect"]] == ["minipkg/app.py"]
+    assert br["tests"] == [{"file": "tests/test_app.py", "via": ["tests/test_app.py", "minipkg/app.py", "minipkg/core.py"]}]
+    assert br["stats"]["test_files"] == 1 and br["stats"]["total_test_files"] == 2

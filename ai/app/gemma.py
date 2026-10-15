@@ -182,7 +182,7 @@ def _semaphore() -> asyncio.Semaphore:
 
 
 def configured() -> bool:
-    return bool(KeyPool.configured()) or bool(config.get("XAI_API_KEYS").strip())
+    return bool(KeyPool.configured()) or any(_provider_keys(n) for n in OPENAI_COMPAT)
 
 
 def fallback_models() -> list[str]:
@@ -293,32 +293,56 @@ async def generate(prompt: str, temperature: float = 0.2, max_tokens: int = 8192
 XAI_POOL = KeyPool()
 
 
-async def _grok(prompt: str, temperature: float, max_tokens: int) -> tuple[str, str] | None:
-    """Last-resort fallback (xAI Grok, OpenAI-compatible). Recorded under its own model name in the call log."""
-    keys = [k for k in re.split(r"[,\s]+", config.get("XAI_API_KEYS")) if k]
-    model = config.get("XAI_MODEL", "grok-3-mini")
+GROQ_POOL = KeyPool()
+
+# OpenAI-compatible fallback providers: name -> (chat completions URL, keys env, model env, default model, key pool)
+OPENAI_COMPAT = {
+    "groq": ("https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEYS", "GROQ_MODEL", "openai/gpt-oss-120b",
+             GROQ_POOL),
+    "xai": ("https://api.x.ai/v1/chat/completions", "XAI_API_KEYS", "XAI_MODEL", "grok-3-mini", XAI_POOL),
+}
+
+
+def _provider_keys(name: str) -> list[str]:
+    return [k for k in re.split(r"[,\s]+", config.get(OPENAI_COMPAT[name][1])) if k]
+
+
+async def _openai_compat(name: str, prompt: str, temperature: float, max_tokens: int) -> tuple[str, str] | None:
+    """Call an OpenAI-compatible fallback provider, rotating its keys. The answer is recorded as `<name>:<model>`."""
+    url, _, model_env, default_model, pool = OPENAI_COMPAT[name]
+    keys = _provider_keys(name)
+    model = config.get(model_env, default_model)
     tried: set[str] = set()
     for _ in keys:
-        key = next((k for k in keys if k not in tried and not XAI_POOL._state.get(k, _KeyState()).dead
-                    and XAI_POOL._state.get(k, _KeyState()).cooldown_until <= time.time()), None)
+        key = next((k for k in keys if k not in tried and not pool._state.get(k, _KeyState()).dead
+                    and pool._state.get(k, _KeyState()).cooldown_until <= time.time()), None)
         if not key:
             return None
         tried.add(key)
         try:
-            r = await _http().post("https://api.x.ai/v1/chat/completions", headers={"Authorization": f"Bearer {key}"},
+            r = await _http().post(url, headers={"Authorization": f"Bearer {key}"},
                                    json={"model": model, "temperature": temperature, "max_tokens": max_tokens,
                                          "messages": [{"role": "user", "content": prompt}]})
         except httpx.HTTPError:
-            return None
+            continue
         if r.status_code == 200:
             text = r.json()["choices"][0]["message"].get("content") or ""
-            return (text, f"xai:{model}") if text.strip() else None
+            if text.strip():
+                pool.succeeded(key)
+                return text, f"{name}:{model}"
+            continue
         msg = _err_msg(r) or r.text[:200]
         if r.status_code == 429:
-            XAI_POOL.rate_limited(key, msg)
+            pool.rate_limited(key, msg)
+        elif r.status_code >= 500:
+            continue
         else:
-            XAI_POOL.retire(key, msg)  # credits exhausted / invalid key
+            pool.retire(key, msg)  # credits exhausted / invalid key
     return None
+
+
+async def _grok(prompt: str, temperature: float, max_tokens: int) -> tuple[str, str] | None:
+    return await _openai_compat("xai", prompt, temperature, max_tokens)
 
 
 def _err_msg(r: httpx.Response) -> str:
@@ -415,9 +439,12 @@ async def _complete_chain(log_: CallLog, purpose: str, prompt: str, schema: type
     if KeyPool.configured():
         tiers.append(("gemma", lambda q: generate(q, max_tokens=max_tokens), gemma_share))
         if fallback_models():
-            tiers.append(("gemini", lambda q: generate(q, max_tokens=max_tokens, model_list=fallback_models()), 0.85))
-    if any(k for k in re.split(r"[,\s]+", config.get("XAI_API_KEYS")) if k):
-        tiers.append(("xai", lambda q: _grok_or_raise(q, max_tokens), 1.0))
+            tiers.append(("gemini", lambda q: generate(q, max_tokens=max_tokens, model_list=fallback_models()), 0.7))
+    for name in ("groq", "xai"):
+        if _provider_keys(name):
+            tiers.append((name, (lambda n: lambda q: _compat_or_raise(n, q, max_tokens))(name), 0.85))
+    if tiers and tiers[-1][2] != 1.0:  # the last tier may use all remaining time
+        tiers[-1] = (tiers[-1][0], tiers[-1][1], 1.0)
     if not tiers:
         log_.record(purpose, "-", 0, False, prompt, "", "no API keys configured")
         return None, "", ""
@@ -452,8 +479,12 @@ async def _complete_chain(log_: CallLog, purpose: str, prompt: str, schema: type
     return None, "", ""
 
 
-async def _grok_or_raise(prompt: str, max_tokens: int) -> tuple[str, str, int]:
-    fb = await _grok(prompt, 0.2, max_tokens)
+async def _compat_or_raise(name: str, prompt: str, max_tokens: int) -> tuple[str, str, int]:
+    fb = await _openai_compat(name, prompt, 0.2, max_tokens)
     if not fb:
-        raise GemmaUnavailable("xai: no usable key (credits exhausted or rejected)")
+        raise GemmaUnavailable(f"{name}: no usable key (credits exhausted, rejected or rate-limited)")
     return fb[0], fb[1], 1
+
+
+async def _grok_or_raise(prompt: str, max_tokens: int) -> tuple[str, str, int]:
+    return await _compat_or_raise("xai", prompt, max_tokens)

@@ -117,7 +117,8 @@ async def usage_ep(req: JobReq):
     log_ = gemma.CallLog(job)
     out = await usage.run(_repo(job, req.repo_dir), state.read(job, "scan.json"), req.python_version, log_)
     state.write(job, "usage.json", out)
-    return {"dependencies": len(out["usage"]), "extra_indicators": out["extra_indicators"], "ai_calls": log_.calls}
+    return {"dependencies": len(out["usage"]), "extra_indicators": out["extra_indicators"],
+            "blast_radius": {k: v["stats"] for k, v in out["blast_radius"].items()}, "ai_calls": log_.calls}
 
 
 @app.post("/v1/propose")
