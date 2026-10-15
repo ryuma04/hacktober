@@ -1,0 +1,2 @@
+{ "status": "ok", "docker": true, "sandbox_image_ready": true, "ai_service": true,
+  "gemma": { "configured": true, "model": "gemma-4-example", "reachable": true }, "version": "0.1.0" }

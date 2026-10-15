@@ -1,0 +1,14 @@
+$ /venv/bin/python -m pytest -q -p no:cacheprovider --junitxml=.depexit/junit.xml
+==================================== ERRORS ====================================
+___________________ ERROR collecting tests/test_render.py ___________________
+ImportError while importing test module '/work/tests/test_render.py'.
+pinglog/render.py:3: in <module>
+    from tplengine import Environment, FileSystemLoader, select_autoescape
+/venv/lib/python3.12/site-packages/tplengine/__init__.py:12: in <module>
+    from markuplib import soft_str
+E   ImportError: cannot import name 'soft_str' from 'markuplib'
+=========================== short test summary info ============================
+ERROR tests/test_render.py::test_render_page
+ERROR tests/test_render.py::test_escapes_html
+6 passed, 2 errors in 1.84s
+exit code: 2
