@@ -10,8 +10,6 @@ import { LogPanel, GemmaActivityCard } from "@/components/RunningView";
 import {
   KpiTiles,
   TestComparison,
-  LimitationsCard,
-  AiDisclosure,
 } from "@/components/CapsuleOverview";
 import { DependencyTable } from "@/components/DependencyTable";
 import { DependencyDetail } from "@/components/DependencyDetail";
@@ -221,14 +219,21 @@ export default function AnalysisPage() {
         {isCompleted && (
           <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
             <a
-              href={apiUrl(`/api/analyses/${id}/capsule`)}
+              href={apiUrl(`/api/analyses/${id}/capsule.pdf?download=1`)}
+              download={`DepExit-${id}.pdf`}
+              className="btn-primary text-xs! py-2! px-4! flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" /> Download PDF
+            </a>
+            <a
+              href={apiUrl(`/api/analyses/${id}/capsule?download=1`)}
               download={`${id}-capsule.json`}
               className="btn-secondary text-xs! py-2! px-3.5! flex items-center gap-1.5 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" /> Download JSON
             </a>
             <a
-              href={apiUrl(`/api/analyses/${id}/capsule.md`)}
+              href={apiUrl(`/api/analyses/${id}/capsule.md?download=1`)}
               download={`${id}-CAPSULE.md`}
               className="btn-secondary text-xs! py-2! px-3.5! flex items-center gap-1.5 cursor-pointer"
             >
@@ -236,7 +241,7 @@ export default function AnalysisPage() {
             </a>
             {!scanOnly && (<>
             <a
-              href={apiUrl(`/api/analyses/${id}/patch.diff`)}
+              href={apiUrl(`/api/analyses/${id}/patch.diff?download=1`)}
               download={`${id}-patch.diff`}
               className="btn-primary text-xs! py-2! px-4! flex items-center gap-1.5 cursor-pointer"
             >
@@ -314,12 +319,6 @@ export default function AnalysisPage() {
 
           {/* 4. Unified Migration Patch Viewer */}
           <PatchViewer analysisId={id} patchStats={capsule.patch} />
-
-          {/* 5. Limitations Card (Honest disclosure, never hidden!) */}
-          <LimitationsCard limitations={capsule.limitations} />
-
-          {/* 6. AI Disclosure Card */}
-          <AiDisclosure ai={capsule.ai} />
 
           {/* Detail Drawer / Modal for selected dependency */}
           {selectedDependency && (

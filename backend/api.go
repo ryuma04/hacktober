@@ -40,6 +40,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/analyses/{id}/events", a.events)
 	mux.HandleFunc("GET /api/analyses/{id}/capsule", a.artifact("capsule.json", "application/json"))
 	mux.HandleFunc("GET /api/analyses/{id}/capsule.md", a.artifact("CAPSULE.md", "text/markdown; charset=utf-8"))
+	mux.HandleFunc("GET /api/analyses/{id}/capsule.pdf", a.capsulePDF)
 	mux.HandleFunc("GET /api/analyses/{id}/patch.diff", a.artifact("patch.diff", "text/x-diff; charset=utf-8"))
 	mux.HandleFunc("GET /api/analyses/{id}/runs/{run}/log", a.runLog)
 	mux.HandleFunc("GET /api/analyses/{id}/runs/{run}/junit", a.junit)
@@ -195,6 +196,44 @@ func (a *API) events(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// capsulePDF serves the PDF report, rendering it first (via the AI service) for analyses that predate it.
+func (a *API) capsulePDF(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	j, ok := a.store.Snapshot(id)
+	if !ok {
+		writeErr(w, 404, "not_found", "analysis "+id+" not found")
+		return
+	}
+	dir := a.store.jobDir(id)
+	pdfPath := filepath.Join(dir, "capsule.pdf")
+	if !fileExists(pdfPath) {
+		if !finished(j.Status) {
+			writeErr(w, 409, "conflict", "analysis is still running")
+			return
+		}
+		if !fileExists(filepath.Join(dir, "capsule.json")) {
+			writeErr(w, 404, "not_found", "no capsule was produced for this analysis")
+			return
+		}
+		if _, err := a.pipe.ai.Call(r.Context(), "/v1/pdf", map[string]any{"job_dir": dir}, 60*time.Second); err != nil {
+			writeErr(w, 502, "internal", "could not render the PDF: "+err.Error())
+			return
+		}
+	}
+	b, err := os.ReadFile(pdfPath)
+	if err != nil {
+		writeErr(w, 404, "not_found", "capsule.pdf was not produced for this analysis")
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	disp := "inline"
+	if r.URL.Query().Get("download") == "1" {
+		disp = "attachment"
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="DepExit-%s.pdf"`, disp, id))
+	_, _ = w.Write(b)
 }
 
 func (a *API) artifact(name, ctype string) http.HandlerFunc {

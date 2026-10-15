@@ -166,3 +166,15 @@ async def capsule_ep(req: CapsuleReq):
     job = _job(req.job_dir)
     return {**capsule.run(job, {**req.target, "python_version": req.python_version}, req.stage_errors, req.base_url),
             "ai_calls": []}
+
+
+@app.post("/v1/pdf")
+async def pdf_ep(req: JobReq):
+    """(Re)render capsule.pdf from an existing capsule.json (older analyses, or on demand)."""
+    from . import report_pdf
+    job = _job(req.job_dir)
+    cap = state.read(job, "capsule.json")
+    if not cap:
+        raise HTTPException(400, "capsule.json not found")
+    out = report_pdf.build(cap, job / "capsule.pdf")
+    return {"path": str(out), "bytes": out.stat().st_size}
