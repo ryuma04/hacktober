@@ -1,0 +1,3 @@
+platdirs>=4.3,<5
+tplengine>=3.1.4,<4
+valimodel>=2.9,<3

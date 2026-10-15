@@ -68,6 +68,30 @@ export interface UsageLocation {
   symbol?: string;
 }
 
+export interface BlastRadius {
+  direct: { file: string; lines: { line: number; kinds: UsageLocation["kind"][]; code: string }[] }[];
+  indirect: { file: string; via: string[] }[];
+  tests: { file: string; via: string[] }[];
+  nodes: { id: string; type: "dependency" | "module" | "test"; label: string; impact?: "direct" | "indirect"; lines?: number }[];
+  edges: { from: string; to: string; kind: "uses" | "imports" | "conftest" }[];
+  stats: { direct_files: number; lines: number; indirect_files: number; test_files: number; total_test_files: number };
+  provenance: "evidence";
+}
+
+export interface WorkspaceFile {
+  path: string;
+  status: "unchanged" | "modified" | "added" | "removed";
+  size_original?: number;
+  size_migrated?: number;
+  viewable: boolean;
+}
+
+export interface WorkspaceFilesResponse {
+  files: WorkspaceFile[];
+  changed: number;
+  migrated_available: boolean;
+}
+
 export interface Dependency {
   name: string;                       // normalized (PEP 503)
   import_names: string[];             // e.g. ["jinja2"]
@@ -91,6 +115,7 @@ export interface Dependency {
     summary: string;
     summary_provenance: "ai" | "derived";
   };
+  blast_radius?: BlastRadius | null;
   replacement?: {
     strategy: Strategy;
     package?: string;
@@ -99,6 +124,7 @@ export interface Dependency {
     confidence: number /*0-1*/;
     alternatives: { package: string; reason_rejected: string }[];
     provenance: "ai" | "derived";
+    model?: string | null;
   };
   migration?: {
     steps: string[];
@@ -250,6 +276,7 @@ export type SSEEventType =
   | "stage_skipped"
   | "log"
   | "ai_call"
+  | "sandbox_log"
   | "job_completed"
   | "job_failed";
 
@@ -270,4 +297,8 @@ export interface SSEEventData {
   latency_ms?: number;
   ok?: boolean;
   summary?: CapsuleSummary | { dependencies_total?: number; at_risk?: number; verdict?: string };
+  // sandbox_log: one line of live Docker output
+  run?: "baseline" | "migrated";
+  stream?: "install" | "test";
+  line?: string;
 }

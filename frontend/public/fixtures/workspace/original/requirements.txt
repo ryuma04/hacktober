@@ -1,0 +1,4 @@
+tomlread==0.10.2
+dirsy==1.4.4
+tplengine==2.1.0
+valimodel==1.10.2

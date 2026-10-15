@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import type { Dependency, Run } from "@/lib/types";
 import { RiskBadge, ProvenanceTag, StrategyChip } from "./Shared";
 import { CodeChip, Button } from "./ui/Base";
+import { BlastRadiusGraph } from "./BlastRadiusGraph";
 import {
   X,
   ExternalLink,
@@ -308,6 +309,19 @@ export function DependencyDetail({
               <p className="text-xs text-[#5A5870] italic">
                 Not imported anywhere.
               </p>
+            )}
+          </section>
+
+          {/* Blast radius: evidence from the AST + the project's import graph */}
+          <section className="bg-white p-5 rounded-2xl border-[3px] border-[#17151F] shadow-[3px_3px_0_0_#17151F] space-y-3">
+            <div className="flex items-center justify-between border-b border-[#17151F]/15 pb-2">
+              <h3 className="font-display font-extrabold text-lg text-[#17151F]">Blast Radius</h3>
+              <ProvenanceTag provenance="evidence" />
+            </div>
+            {dependency.blast_radius ? (
+              <BlastRadiusGraph blast={dependency.blast_radius} depName={dependency.name} />
+            ) : (
+              <p className="text-xs text-[#5A5870] italic">Not imported anywhere, so removing it breaks no project code.</p>
             )}
           </section>
 

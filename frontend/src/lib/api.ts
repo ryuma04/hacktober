@@ -6,6 +6,7 @@ import type {
   Job,
   Capsule,
   ApiError,
+  WorkspaceFilesResponse,
 } from "./types";
 
 export class ApiRequestError extends Error {
@@ -142,4 +143,25 @@ export async function getLog(id: string, run: string, stream: "install" | "test"
     if (res.ok) return await res.text();
   }
   throw new ApiRequestError(`Log not found for ${run} (${stream})`, "not_found", 404);
+}
+
+/** Original clone vs the migrated workspace that ran in Docker (read-only evidence). */
+export async function getWorkspaceFiles(id: string): Promise<WorkspaceFilesResponse> {
+  if (IS_MOCK) {
+    const res = await fetch("/fixtures/workspace/files.json");
+    return handleResponse<WorkspaceFilesResponse>(res);
+  }
+  const res = await fetch(`${API}/api/analyses/${encodeURIComponent(id)}/files`);
+  return handleResponse<WorkspaceFilesResponse>(res);
+}
+
+export async function getWorkspaceFile(id: string, side: "original" | "migrated", path: string): Promise<string | null> {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  const url = IS_MOCK
+    ? `/fixtures/workspace/${side}/${encoded}`
+    : `${API}/api/analyses/${encodeURIComponent(id)}/${side}/${encoded}`;
+  const res = await fetch(url);
+  if (res.status === 404) return null; // file does not exist on this side (added / removed)
+  if (!res.ok) throw new ApiRequestError(`Failed to load ${path} (${side})`, "fetch_error", res.status);
+  return res.text();
 }

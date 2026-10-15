@@ -44,6 +44,8 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/analyses/{id}/runs/{run}/log", a.runLog)
 	mux.HandleFunc("GET /api/analyses/{id}/runs/{run}/junit", a.junit)
 	mux.HandleFunc("GET /api/analyses/{id}/migrated/{path...}", a.migratedFile)
+	mux.HandleFunc("GET /api/analyses/{id}/original/{path...}", a.originalFile)
+	mux.HandleFunc("GET /api/analyses/{id}/files", a.files)
 	return a.cors(mux)
 }
 

@@ -1,0 +1,27 @@
+{
+  "files": [
+    {
+      "path": "pinglog/cli.py",
+      "status": "unchanged",
+      "size_original": 75,
+      "size_migrated": 75,
+      "viewable": true
+    },
+    {
+      "path": "pinglog/config.py",
+      "status": "modified",
+      "size_original": 336,
+      "size_migrated": 408,
+      "viewable": true
+    },
+    {
+      "path": "requirements.txt",
+      "status": "modified",
+      "size_original": 65,
+      "size_migrated": 55,
+      "viewable": true
+    }
+  ],
+  "changed": 2,
+  "migrated_available": true
+}

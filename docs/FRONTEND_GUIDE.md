@@ -115,6 +115,8 @@ If any optional field is missing (`replacement`, `migration`, `test_results`), s
 - Empty state: "Waiting for Docker…" (the migrated pane fills only after `materialize`; say so).
 - Mock: `fixtures/events.ndjson` contains `sandbox_log` lines.
 
+> **Implemented:** `components/BlastRadiusGraph.tsx` (7.6, in DependencyDetail) and `components/CodeDiffViewer.tsx` (Monaco diff of `/files` + `/original/{path}` vs `/migrated/{path}`, on the capsule page). Still open: 7.5 sandbox terminals.
+
 ### 7.6 Blast radius (per dependency)
 - In DependencyDetail, a new section **Blast radius** right after **Usage locations**: headline from `stats`: "`lines` lines in `direct_files` files use it · `indirect_files` modules import those · `test_files`/`total_test_files` test files reach it".
 - Graph: render `nodes`/`edges` as 3 columns, left to right: dependency (coral) → direct modules (butter, show line count) → indirect modules (sky) → tests (mint). Draw `edges` as lines (SVG); `kind: conftest` edges dashed. A clean Tailwind column layout with connector lines is enough; no graph library required.

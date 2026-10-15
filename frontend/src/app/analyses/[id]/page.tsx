@@ -16,6 +16,9 @@ import {
 import { DependencyTable } from "@/components/DependencyTable";
 import { DependencyDetail } from "@/components/DependencyDetail";
 import { PatchViewer } from "@/components/PatchViewer";
+import { CodeDiffViewer } from "@/components/CodeDiffViewer";
+import { SandboxTerminals } from "@/components/SandboxTerminals";
+import { BlastMap } from "@/components/BlastMap";
 import {
   ArrowLeft,
   Download,
@@ -37,6 +40,7 @@ export default function AnalysisPage() {
     stages,
     logs,
     aiCalls,
+    sandbox,
     capsule,
     loading,
     error,
@@ -238,6 +242,8 @@ export default function AnalysisPage() {
         <div className="space-y-6">
           <StageTimeline stages={stages} />
 
+          <SandboxTerminals sandbox={sandbox} stages={stages} />
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-8">
               <LogPanel logs={logs} />
@@ -255,8 +261,15 @@ export default function AnalysisPage() {
           {/* 1. KPI Tiles (4 FeatureCards) */}
           <KpiTiles summary={capsule.summary} />
 
+          {/* Repo-wide blast map (graph) */}
+          <BlastMap dependencies={capsule.dependencies} />
+
           {/* 2. Test Comparison (Baseline vs Migrated) */}
           <TestComparison runs={capsule.runs} analysisId={id} />
+
+          <SandboxTerminals sandbox={sandbox} stages={stages} />
+
+          <CodeDiffViewer analysisId={id} runs={capsule.runs} />
 
           {/* 3. Evaluated Dependencies Table */}
           <DependencyTable

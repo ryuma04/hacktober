@@ -31,6 +31,20 @@ export interface AiCallItem {
   error?: string;
 }
 
+export type SandboxRun = "baseline" | "migrated";
+export type SandboxStream = "install" | "test";
+export interface SandboxLine {
+  seq: number;
+  line: string;
+}
+export type SandboxLines = Record<SandboxRun, Record<SandboxStream, SandboxLine[]>>;
+
+const MAX_TERMINAL_LINES = 600; // per run+stream; the full log is always available via the log modal
+
+export function emptySandbox(): SandboxLines {
+  return { baseline: { install: [], test: [] }, migrated: { install: [], test: [] } };
+}
+
 export const STAGE_ORDER: { id: StageId; label: string }[] = [
   { id: "clone", label: "Cloning repository" },
   { id: "scan", label: "Scanning dependencies" },
@@ -56,6 +70,7 @@ export function useAnalysis(id: string) {
   const [stages, setStages] = useState<Stage[]>(initStages);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [aiCalls, setAiCalls] = useState<AiCallItem[]>([]);
+  const [sandbox, setSandbox] = useState<SandboxLines>(emptySandbox);
   const [capsule, setCapsule] = useState<Capsule | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +109,18 @@ export function useAnalysis(id: string) {
       seenSeqs.current.add(data.seq);
 
       switch (eventType) {
+        case "sandbox_log": {
+          const run = data.run;
+          const stream = data.stream;
+          if ((run === "baseline" || run === "migrated") && (stream === "install" || stream === "test")) {
+            setSandbox((prev) => {
+              const cur = prev[run][stream];
+              if (cur.length >= MAX_TERMINAL_LINES) return prev;
+              return { ...prev, [run]: { ...prev[run], [stream]: [...cur, { seq: data.seq, line: data.line ?? "" }] } };
+            });
+          }
+          break;
+        }
         case "job_started": {
           setJob((prev) => ({
             id,
@@ -223,6 +250,7 @@ export function useAnalysis(id: string) {
     setError(null);
     setCapsule(null);
     setLoading(true);
+    setSandbox(emptySandbox());
 
     async function run() {
       try {
@@ -298,6 +326,20 @@ export function useAnalysis(id: string) {
           } catch (e: any) {
             console.error("Failed fetching capsule:", e);
           }
+          // Finished job: replay the saved Docker output so the sandbox terminals fill instantly.
+          const replay = new EventSource(`${API}/api/analyses/${encodeURIComponent(id)}/events`);
+          esRef.current = replay;
+          const stop = () => replay.close();
+          replay.addEventListener("sandbox_log", (evt: MessageEvent) => {
+            try {
+              processEventData("sandbox_log", JSON.parse(evt.data));
+            } catch (e) {
+              console.error("Error parsing sandbox_log replay:", e);
+            }
+          });
+          replay.addEventListener("job_completed", stop);
+          replay.addEventListener("job_failed", stop);
+          replay.onerror = stop; // the server closes the stream after the replay; never reconnect
           return;
         }
 
@@ -319,6 +361,7 @@ export function useAnalysis(id: string) {
           "stage_skipped",
           "log",
           "ai_call",
+          "sandbox_log",
           "job_completed",
           "job_failed",
         ];
@@ -382,6 +425,7 @@ export function useAnalysis(id: string) {
     stages,
     logs,
     aiCalls,
+    sandbox,
     capsule,
     loading,
     error,
