@@ -5,24 +5,61 @@
   "version": "0.1.0",
   "publisher": "depexit",
   "license": "MIT",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Linters", "Other"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./extension.js",
   "contributes": {
     "commands": [
-      { "command": "depexit.analyze", "title": "DepExit: Analyze This Workspace" },
-      { "command": "depexit.load", "title": "DepExit: Load Analysis by ID" },
-      { "command": "depexit.openCapsule", "title": "DepExit: Open Exit Capsule (Markdown)" },
-      { "command": "depexit.openPatch", "title": "DepExit: Open Migration Patch" },
-      { "command": "depexit.clear", "title": "DepExit: Clear Diagnostics" }
+      {
+        "command": "depexit.analyze",
+        "title": "DepExit: Analyze This Workspace"
+      },
+      {
+        "command": "depexit.load",
+        "title": "DepExit: Load Analysis by ID"
+      },
+      {
+        "command": "depexit.openCapsule",
+        "title": "DepExit: Open Exit Capsule (Markdown)"
+      },
+      {
+        "command": "depexit.openPatch",
+        "title": "DepExit: Open Migration Patch"
+      },
+      {
+        "command": "depexit.applyAll",
+        "title": "DepExit: Apply All Migrations"
+      },
+      {
+        "command": "depexit.clear",
+        "title": "DepExit: Clear Diagnostics"
+      }
     ],
     "configuration": {
       "title": "DepExit",
       "properties": {
-        "depexit.apiUrl": { "type": "string", "default": "http://localhost:8080", "description": "DepExit API base URL." },
+        "depexit.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "DepExit API base URL."
+        },
         "depexit.minLevel": {
-          "type": "string", "enum": ["critical", "high", "medium", "low"], "default": "medium",
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ],
+          "default": "medium",
           "description": "Only show diagnostics for dependencies at or above this risk level."
         }
       }

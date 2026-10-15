@@ -140,7 +140,7 @@ async function analyze() {
     { location: vscode.ProgressLocation.Notification, title: "DepExit", cancellable: true },
     async (progress, token) => {
       let last = "";
-      for (;;) {
+      for (; ;) {
         if (token.isCancellationRequested) return;
         const job = await api(`/api/analyses/${created.id}`);
         const running = job.stages.filter((s) => s.status === "running").map((s) => s.label).join(" · ");
@@ -172,7 +172,10 @@ class QuickFix {
     fix.diagnostics = ours;
     const show = new vscode.CodeAction("DepExit: open Exit Capsule", vscode.CodeActionKind.QuickFix);
     show.command = { command: "depexit.openCapsule", title: "Open capsule" };
-    return [fix, show];
+    const all = new vscode.CodeAction("DepExit: apply migration to ALL files", vscode.CodeActionKind.QuickFix);
+    all.command = { command: "depexit.applyAll", title: "Apply all migrations" };
+    all.diagnostics = ours;
+    return [fix, all, show];
   }
 }
 
@@ -196,6 +199,43 @@ async function applyFile(uri, rel) {
   const edit = new vscode.WorkspaceEdit();
   edit.replace(uri, new vscode.Range(0, 0, doc.lineCount, 0), text);
   await vscode.workspace.applyEdit(edit);
+}
+
+async function applyAll() {
+  if (!state.id) throw new Error("load an analysis first (DepExit: Load Analysis by ID)");
+  const root = workspaceRoot();
+  if (!root) throw new Error("open the cloned repository as a workspace folder");
+  const listing = await api(`/api/analyses/${state.id}/files`);
+  const changed = listing.files.filter((f) => f.status === "modified" || f.status === "added");
+  if (!changed.length) {
+    vscode.window.showInformationMessage("DepExit: nothing to migrate.");
+    return;
+  }
+  const picks = await vscode.window.showQuickPick(
+    changed.map((f) => ({ label: f.path, description: f.status, picked: true })),
+    { canPickMany: true, title: `DepExit: ${changed.length} file(s) changed by the migration. Untick any to skip.` });
+  if (!picks || !picks.length) return;
+  const ok = await vscode.window.showWarningMessage(
+    `Apply DepExit's Docker-verified migration to ${picks.length} file(s)? Changes stay unsaved so you can undo.`,
+    { modal: true }, "Apply All");
+  if (ok !== "Apply All") return;
+
+  const edit = new vscode.WorkspaceEdit();
+  let applied = 0;
+  for (const p of picks) {
+    const uri = vscode.Uri.joinPath(root, p.label);
+    const text = await api(`/api/analyses/${state.id}/migrated/${p.label}`, true);
+    if (p.description === "added") {
+      edit.createFile(uri, { overwrite: true, contents: Buffer.from(text, "utf8") });
+    } else {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      if (doc.getText() === text) continue;
+      edit.replace(uri, new vscode.Range(0, 0, doc.lineCount, 0), text);
+    }
+    applied++;
+  }
+  await vscode.workspace.applyEdit(edit);
+  vscode.window.showInformationMessage(`DepExit: applied migration to ${applied} file(s). Review, run your tests, then save.`);
 }
 
 function activate(context) {
@@ -227,6 +267,7 @@ function activate(context) {
       await openText("/patch.diff", "diff");
     })),
     vscode.commands.registerCommand("depexit.applyFile", wrap(applyFile)),
+    vscode.commands.registerCommand("depexit.applyAll", wrap(applyAll)),
     vscode.commands.registerCommand("depexit.clear", () => { diagnostics.clear(); statusBar.hide(); state.id = null; }),
     vscode.languages.registerCodeActionsProvider({ scheme: "file" }, new QuickFix(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
     vscode.languages.registerHoverProvider({ scheme: "file" }, {
@@ -240,6 +281,6 @@ function activate(context) {
   );
 }
 
-function deactivate() {}
+function deactivate() { }
 
 module.exports = { activate, deactivate };
