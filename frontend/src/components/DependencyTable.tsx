@@ -154,7 +154,14 @@ export function DependencyTable({
 
                   {/* Applied */}
                   <td className="py-3 px-3 text-center">
-                    {dep.migration ? (
+                    {dep.migration?.proposed_only ? (
+                      <span
+                        title={dep.migration.not_applied_reason || "Proposed only (scan-only)"}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FDF1D0] text-[#17151F] border border-[#17151F]/30"
+                      >
+                        Proposed
+                      </span>
+                    ) : dep.migration ? (
                       dep.migration.applied ? (
                         <span
                           title="Patch successfully applied and compiled"

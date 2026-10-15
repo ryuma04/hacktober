@@ -17,6 +17,7 @@ import { DependencyTable } from "@/components/DependencyTable";
 import { DependencyDetail } from "@/components/DependencyDetail";
 import { PatchViewer } from "@/components/PatchViewer";
 import { CodeDiffViewer } from "@/components/CodeDiffViewer";
+import { RepoCodeBrowser } from "@/components/RepoCodeBrowser";
 import { SandboxTerminals } from "@/components/SandboxTerminals";
 import { BlastMap } from "@/components/BlastMap";
 import { PipelineFlow } from "@/components/PipelineFlow";
@@ -54,6 +55,8 @@ export default function AnalysisPage() {
 
   const [selectedDependency, setSelectedDependency] = useState<Dependency | null>(null);
   const [prOpen, setPrOpen] = useState(false);
+  // npm projects run the scan-only pipeline: no migration, no Docker runs, nothing to apply
+  const scanOnly = (capsule?.target?.ecosystem ?? job?.ecosystem) === "npm";
 
   // If loading initial state
   if (loading && !job) {
@@ -231,6 +234,7 @@ export default function AnalysisPage() {
             >
               <FileText className="w-3.5 h-3.5" /> Download Markdown
             </a>
+            {!scanOnly && (<>
             <a
               href={apiUrl(`/api/analyses/${id}/patch.diff`)}
               download={`${id}-patch.diff`}
@@ -245,6 +249,7 @@ export default function AnalysisPage() {
             >
               <GitPullRequest className="w-3.5 h-3.5" /> Apply fixes
             </button>
+            </>)}
           </div>
         )}
         {prOpen && (
@@ -257,7 +262,7 @@ export default function AnalysisPage() {
         <div className="space-y-6">
           <PipelineFlow stages={stages} logs={logs} aiCalls={aiCalls} stageStats={stageStats} sandbox={sandbox} />
 
-          <SandboxTerminals sandbox={sandbox} stages={stages} />
+          {!scanOnly && <SandboxTerminals sandbox={sandbox} stages={stages} />}
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-8">
@@ -277,17 +282,29 @@ export default function AnalysisPage() {
           {/* How this capsule was made: the same clickable pipeline, kept after completion */}
           <PipelineFlow stages={stages} logs={logs} aiCalls={aiCalls} stageStats={stageStats} sandbox={sandbox} />
 
-          <KpiTiles summary={capsule.summary} />
+          {scanOnly && (
+            <NoticeBanner title="Scan-only analysis (JavaScript / npm)" code="npm">
+              Dependencies, npm registry facts, OSV advisories, import usage and the blast radius are real, and Gemma 4
+              proposes a replacement for each risky package. For npm projects DepExit does not yet rewrite code or run the
+              project in the Docker sandbox, so nothing here is verified by execution and there is no patch to apply.
+            </NoticeBanner>
+          )}
+
+          <KpiTiles summary={capsule.summary} scanOnly={scanOnly} />
 
           {/* Repo-wide blast map (graph) */}
           <BlastMap dependencies={capsule.dependencies} />
 
           {/* 2. Test Comparison (Baseline vs Migrated) */}
-          <TestComparison runs={capsule.runs} analysisId={id} />
+          {!scanOnly && <TestComparison runs={capsule.runs} analysisId={id} />}
 
-          <SandboxTerminals sandbox={sandbox} stages={stages} />
+          {!scanOnly && <SandboxTerminals sandbox={sandbox} stages={stages} />}
 
-          <CodeDiffViewer analysisId={id} runs={capsule.runs} />
+          {scanOnly ? (
+            <RepoCodeBrowser analysisId={id} dependencies={capsule.dependencies} />
+          ) : (
+            <CodeDiffViewer analysisId={id} runs={capsule.runs} />
+          )}
 
           {/* 3. Evaluated Dependencies Table */}
           <DependencyTable

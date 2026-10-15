@@ -98,3 +98,25 @@ def test_namespace_package_folder_is_local(tmp_path):
     (tmp_path / "src" / "assets" / "banner.txt").write_text("hi\n")
     names = pysrc.local_packages(tmp_path)
     assert "classes" in names and "assets" not in names
+
+
+def test_npm_package_names_imports_and_graph():
+    from app import npm
+    repo = Path(__file__).parent / "fixtures" / "minijs"
+    assert npm.package_of("left-padder/sub") == "left-padder"
+    assert npm.package_of("@scope/lazy-pkg/x") == "@scope/lazy-pkg"
+    assert npm.package_of("./lib/helper") is None and npm.package_of("node:fs") is None and npm.package_of("fs") is None
+    used = npm.imports(repo)
+    assert {"left-padder", "@scope/lazy-pkg", "undeclared-lib", "css-framework"} <= set(used)
+    assert "fs" not in used
+    assert used["@scope/lazy-pkg"][0]["kind"] == "call" and used["css-framework"][0]["file"] == "src/styles.css"
+    decls, installed, _ = npm.manifests(repo)
+    assert installed["left-padder"] == "1.2.5" and "inner" not in installed  # nested packages are not top-level
+    assert {(d["name"], d["group"]) for d in decls} == {("left-padder", "main"), ("unused-thing", "main"), ("build-tool", "dev")}
+    graph = npm.import_graph(repo)
+    assert graph["src/main.js"] == {"src/lib/helper.js"}
+    assert graph["src/__tests__/helper.test.js"] == {"src/lib/helper.js"}
+    br = npm.blast.compute(repo, {"undeclared-lib": {"locations": used["undeclared-lib"]}},
+                           graph=graph, is_test=npm.is_test_file)["undeclared-lib"]
+    assert [x["file"] for x in br["indirect"]] == ["src/main.js"]
+    assert [x["file"] for x in br["tests"]] == ["src/__tests__/helper.test.js"]

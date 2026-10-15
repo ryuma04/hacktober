@@ -414,19 +414,25 @@ export function DependencyDetail({
                 {/* Applied status banner */}
                 <div
                   className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold ${
-                    dependency.migration.applied
+                    dependency.migration.proposed_only
+                      ? "bg-[#FDF1D0] border-[#17151F]/30 text-[#17151F]"
+                      : dependency.migration.applied
                       ? "bg-[#B9E4A1]/40 border-[#17151F] text-[#17151F]"
                       : "bg-[#FDECEC] border-[#D64545] text-[#D64545]"
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    {dependency.migration.applied ? (
+                    {dependency.migration.proposed_only ? (
+                      <HelpCircle className="w-4 h-4 text-[#17151F]" />
+                    ) : dependency.migration.applied ? (
                       <CheckCircle className="w-4 h-4 text-[#17151F]" />
                     ) : (
                       <XCircle className="w-4 h-4 text-[#D64545]" />
                     )}
                     <span>
-                      {dependency.migration.applied
+                      {dependency.migration.proposed_only
+                        ? "Proposed migration — not applied (scan-only)"
+                        : dependency.migration.applied
                         ? "Migration patch applied & python-compiled successfully"
                         : "Migration patch NOT applied"}
                     </span>

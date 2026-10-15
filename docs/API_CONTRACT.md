@@ -213,7 +213,7 @@ interface Capsule {
   capsule_id: string; generated_at: string;
   tool: { name: "DepExit"; version: string };
   target: { repo_url: string; ref: string; commit: string; python_version: string;
-            manifests: string[]; };
+            manifests: string[]; ecosystem?: "python" | "npm"; verification?: "sandbox" | "scan_only"; };
   ai: { provider: "Google AI Studio (Gemini API)"; model: string; calls: number;
         failed_calls: number; fallback_used: boolean; terms_url: string; };
   summary: CapsuleSummary;

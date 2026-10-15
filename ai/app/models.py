@@ -11,7 +11,7 @@ Outcome = Literal["passed", "failed", "error", "skipped"]
 
 
 class Evidence(BaseModel):
-    source: Literal["pypi", "osv", "ast", "manifest", "sandbox", "knowledge"]
+    source: Literal["pypi", "npm", "osv", "ast", "manifest", "sandbox", "knowledge"]
     ref: str | None = None
     url: str | None = None
     detail: str | None = None
@@ -117,6 +117,7 @@ class Migration(BaseModel):
     files_changed: list[str]
     applied: bool
     not_applied_reason: str | None = None
+    proposed_only: bool = False  # scan-only ecosystems: a plan, never applied or executed
     provenance: Literal["ai", "derived"]
 
 

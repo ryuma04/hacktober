@@ -44,6 +44,7 @@ type Job struct {
 	RepoURL    string          `json:"repo_url"`
 	Ref        string          `json:"ref"`
 	Commit     string          `json:"commit,omitempty"`
+	Ecosystem  string          `json:"ecosystem,omitempty"` // python | npm (npm is scan-only)
 	Status     string          `json:"status"`
 	CreatedAt  time.Time       `json:"created_at"`
 	FinishedAt *time.Time      `json:"finished_at,omitempty"`

@@ -6,7 +6,7 @@ import { FeatureCard, Card, CodeChip, Button } from "./ui/Base";
 import { ExternalLink, Check, AlertCircle, FileText, X } from "lucide-react";
 import { getLog } from "@/lib/api";
 
-export function KpiTiles({ summary }: { summary: CapsuleSummary }) {
+export function KpiTiles({ summary, scanOnly = false }: { summary: CapsuleSummary; scanOnly?: boolean }) {
   const { dependencies_total, at_risk, by_level, baseline, migrated, gaps } = summary;
 
   return (
@@ -30,7 +30,7 @@ export function KpiTiles({ summary }: { summary: CapsuleSummary }) {
         pastel="coral"
         pillLabel="RISK SIGNALS"
         title={`${at_risk} At Risk`}
-        subtitle="Vulnerabilities, Py3.12 rot, drift"
+        subtitle={scanOnly ? "Vulnerabilities, deprecation, staleness" : "Vulnerabilities, Py3.12 rot, drift"}
       >
         <div className="flex flex-wrap gap-1.5 mt-2">
           {by_level.critical > 0 && (
@@ -60,11 +60,15 @@ export function KpiTiles({ summary }: { summary: CapsuleSummary }) {
       <FeatureCard
         pastel="mint"
         pillLabel="SANDBOX VERIFICATION"
-        title={`${baseline.passed} → ${migrated.passed} of ${baseline.total}`}
-        subtitle="Pytest passing in Docker sandbox"
+        title={scanOnly ? "Not run" : `${baseline.passed} → ${migrated.passed} of ${baseline.total}`}
+        subtitle={scanOnly ? "Scan-only: no Docker sandbox for npm yet" : "Pytest passing in Docker sandbox"}
       >
         <div className="mt-2 text-xs font-bold text-[#17151F]">
-          {migrated.passed > baseline.passed ? (
+          {scanOnly ? (
+            <span>Findings are not verified by execution</span>
+          ) : baseline.total === 0 && migrated.total === 0 ? (
+            <span>No tests were executed</span>
+          ) : migrated.passed > baseline.passed ? (
             <span className="text-[#17151F] flex items-center gap-1">
               ✓ +{migrated.passed - baseline.passed} test(s) resolved after migration
             </span>
@@ -78,8 +82,8 @@ export function KpiTiles({ summary }: { summary: CapsuleSummary }) {
       <FeatureCard
         pastel="butter"
         pillLabel="A/B DIFF GAPS"
-        title={`${gaps.regressed} Regressed`}
-        subtitle={`${gaps.fixed} fixed · ${gaps.still_failing} still failing`}
+        title={scanOnly ? "No A/B run" : `${gaps.regressed} Regressed`}
+        subtitle={scanOnly ? "Gaps are measured only for sandboxed migrations" : `${gaps.fixed} fixed · ${gaps.still_failing} still failing`}
       >
         <div className="mt-2 flex gap-2 text-xs font-semibold">
           <span className="bg-white/80 px-2 py-0.5 rounded-full">

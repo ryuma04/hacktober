@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from . import capsule, compare, config, gemma, materialize, propose, scan, state, usage
+from . import capsule, compare, config, gemma, materialize, npm, propose, scan, state, usage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("depexit.ai")
@@ -50,6 +50,7 @@ class JobReq(BaseModel):
     job_dir: str
     repo_dir: str | None = None
     python_version: str = "3.12"
+    ecosystem: str = "python"  # python | npm (npm is scan-only)
 
 
 class ProposeReq(JobReq):
@@ -106,7 +107,12 @@ async def health(probe: bool = False):
 async def scan_ep(req: JobReq):
     job = _job(req.job_dir)
     log_ = gemma.CallLog(job)
-    out = await scan.run(_repo(job, req.repo_dir), req.python_version, log_)
+    repo = _repo(job, req.repo_dir)
+    if req.ecosystem == "npm":
+        out = await npm.scan(repo)
+    else:
+        out = await scan.run(repo, req.python_version, log_)
+        out["ecosystem"] = "python"
     state.write(job, "scan.json", out)
     return {**out, "ai_calls": log_.calls}
 
@@ -115,7 +121,11 @@ async def scan_ep(req: JobReq):
 async def usage_ep(req: JobReq):
     job = _job(req.job_dir)
     log_ = gemma.CallLog(job)
-    out = await usage.run(_repo(job, req.repo_dir), state.read(job, "scan.json"), req.python_version, log_)
+    scan_out = state.read(job, "scan.json")
+    if (scan_out or {}).get("ecosystem") == "npm":
+        out = npm.usage(_repo(job, req.repo_dir), scan_out)
+    else:
+        out = await usage.run(_repo(job, req.repo_dir), scan_out, req.python_version, log_)
     state.write(job, "usage.json", out)
     return {"dependencies": len(out["usage"]), "extra_indicators": out["extra_indicators"],
             "blast_radius": {k: v["stats"] for k, v in out["blast_radius"].items()}, "ai_calls": log_.calls}
@@ -125,7 +135,8 @@ async def usage_ep(req: JobReq):
 async def propose_ep(req: ProposeReq):
     job = _job(req.job_dir)
     log_ = gemma.CallLog(job)
-    out = await propose.run(job, req.python_version, req.min_level, log_)
+    eco = (state.read(job, "scan.json") or {}).get("ecosystem", "python")
+    out = await propose.run(job, req.python_version, req.min_level, log_, eco)
     state.write(job, "proposals.json", out)
     return {**out, "ai_calls": log_.calls}
 

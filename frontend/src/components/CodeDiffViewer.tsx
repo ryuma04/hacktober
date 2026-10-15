@@ -15,6 +15,8 @@ const DiffEditor = dynamic(() => import("@monaco-editor/react").then((m) => m.Di
 const LANGUAGES: Record<string, string> = {
   py: "python", toml: "ini", cfg: "ini", ini: "ini", txt: "plaintext", md: "markdown", json: "json",
   yaml: "yaml", yml: "yaml", j2: "html", html: "html", sh: "shell", xml: "xml",
+  js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript", ts: "typescript", tsx: "typescript",
+  css: "css", scss: "scss", less: "less", vue: "html", svelte: "html",
 };
 
 export function languageFor(path: string): string {

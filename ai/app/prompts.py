@@ -55,19 +55,44 @@ class Decision(BaseModel):
     usage_summary: str = ""
 
 
-def decide(py: str, dep: dict, usage: list[str], candidates: list[dict], others: list[str]) -> str:
+ECOSYSTEM_RULES = {
+    "python": {
+        "registry": "PyPI",
+        "spec": "- For replace/upgrade/declare give a PyPI package and a version_spec like '>=X.Y,<Z'. For stdlib give the "
+                "module name in package and version_spec null. For remove/keep package may be null.\n",
+        "tests": "- suggested_tests: 1-3 runnable pytest functions using only the project's public API, covering behaviour "
+                 "that could change with this migration.\n",
+        "stdlib": "the standard library",
+    },
+    "npm": {
+        "registry": "npm",
+        "spec": "- For replace/upgrade/declare give an npm package name (scoped names allowed) and a semver range like "
+                "'^X.Y.Z'. Use stdlib for a built-in platform/Node.js API (package = the API, e.g. 'fetch' or "
+                "'node:crypto', version_spec null). For remove/keep package may be null.\n"
+                "- devDependencies are build/lint tooling: prefer upgrading them within their ecosystem (e.g. eslint "
+                "with its plugins) and mention config files to update.\n",
+        "tests": "- suggested_tests: 1-3 test cases (Vitest/Jest style, JavaScript) using only the project's public API, "
+                 "covering behaviour that could change with this migration.\n",
+        "stdlib": "a built-in platform or Node.js API",
+    },
+}
+
+
+def decide(py: str, dep: dict, usage: list[str], candidates: list[dict], others: list[str],
+           ecosystem: str = "python") -> str:
+    eco = ECOSYSTEM_RULES.get(ecosystem, ECOSYSTEM_RULES["python"])
     return PREAMBLE.format(py=py) + (
-        "Decide how this project should exit or fix the dependency below.\n"
-        "Strategies: replace (different package), upgrade (same package, newer version), stdlib (use the standard "
-        "library), remove (not needed), declare (it is imported but undeclared: add it to the manifests), keep.\n"
+        (f"Ecosystem: {ecosystem}.\n" if ecosystem != "python" else "")  # python prompt unchanged: keeps the cache valid
+        + "Decide how this project should exit or fix the dependency below.\n"
+        "Strategies: replace (different package), upgrade (same package, newer version), "
+        f"stdlib (use {eco['stdlib']}), remove (not needed), declare (it is imported but undeclared: add it to the "
+        "manifests), keep.\n"
         "Rules:\n"
         "- Prefer the smallest change that removes the risk; prefer stdlib when it fully covers the APIs used.\n"
         "- The plan must cover EVERY usage location listed. If code must change, set code_changes_needed=true.\n"
-        "- For replace/upgrade/declare give a PyPI package and a version_spec like '>=X.Y,<Z'. For stdlib give the "
-        "module name in package and version_spec null. For remove/keep package may be null.\n"
+        + eco["spec"] +
         "- steps: ordered, concrete, mention file paths.\n"
-        "- suggested_tests: 1-3 runnable pytest functions using only the project's public API, covering behaviour "
-        "that could change with this migration.\n"
+        + eco["tests"] +
         "- open_concerns: behaviour differences or risks that the existing tests may not catch.\n"
         "- confidence: 0..1, how sure you are the migration is safe.\n"
         "- risk_summary: at most 2 sentences on WHY this dependency is risky, citing the indicator facts.\n"
@@ -79,7 +104,7 @@ def decide(py: str, dep: dict, usage: list[str], candidates: list[dict], others:
         '"open_concerns": ["..."], "risk_summary": "...", "usage_summary": "..."}\n\n'
         f"DEPENDENCY FACTS:\n{_j(dep)}\n\n"
         f"USAGE LOCATIONS (file:line: code):\n" + ("\n".join(usage) or "(not imported anywhere)") + "\n\n"
-        f"CANDIDATES (with PyPI health; hints only, you may choose otherwise):\n{_j(candidates)}\n\n"
+        f"CANDIDATES (with {eco['registry']} health; hints only, you may choose otherwise):\n{_j(candidates)}\n\n"
         f"OTHER PROJECT DEPENDENCIES: {', '.join(others)}"
     )
 

@@ -459,6 +459,7 @@
         "source": {
           "enum": [
             "pypi",
+            "npm",
             "osv",
             "ast",
             "manifest",
@@ -677,6 +678,11 @@
           ],
           "default": null,
           "title": "Not Applied Reason"
+        },
+        "proposed_only": {
+          "default": false,
+          "title": "Proposed Only",
+          "type": "boolean"
         },
         "provenance": {
           "enum": [

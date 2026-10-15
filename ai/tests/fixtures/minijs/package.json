@@ -1,0 +1,10 @@
+{
+  "name": "minijs",
+  "dependencies": {
+    "left-padder": "^1.2.0",
+    "unused-thing": "*"
+  },
+  "devDependencies": {
+    "build-tool": "^3.0.0"
+  }
+}

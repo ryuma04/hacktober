@@ -61,6 +61,8 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
         r["junit_url"] = _prefix(base_url, r.get("junit_url"))
     by_run = {r["id"]: {t["id"]: t["outcome"] for t in r["tests"]} for r in runs}
 
+    ecosystem = scan.get("ecosystem", "python")
+    scan_only = ecosystem != "python"
     out_deps = []
     for d in deps:
         for ind in d["risk"]["indicators"]:
@@ -107,7 +109,10 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
             "migration": None if not p or p["strategy"] == "keep" else {
                 "steps": p.get("steps", []), "files_changed": (a or {}).get("files_changed", []),
                 "applied": (a or {}).get("applied", False) if a else False,
-                "not_applied_reason": (a or {}).get("not_applied_reason") if a else "Materialize stage did not run",
+                "not_applied_reason": ((a or {}).get("not_applied_reason") if a else
+                                       f"Proposed only: {ecosystem} projects are scan-only (no migration or sandbox run)"
+                                       if scan_only else "Materialize stage did not run"),
+                "proposed_only": scan_only,
                 "provenance": p.get("provenance", "ai")},
             "suggested_tests": [{**t, "provenance": "ai"} for t in (p or {}).get("suggested_tests", [])],
             "test_results": {"run_ids": [r["id"] for r in runs], "affected_tests": affected, "status": status},
@@ -133,6 +138,8 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
         verdict = "safe_to_migrate"
     else:
         verdict = "migrate_with_care"
+    if scan_only:
+        verdict = "migrate_with_care"  # nothing was migrated or executed, so never "safe" nor "blocked" by a test run
     by_level = {lv: 0 for lv in ("critical", "high", "medium", "low", "none")}
     for d in out_deps:
         by_level[d["risk"]["level"]] += 1
@@ -141,6 +148,9 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
     headline = cmp_.get("headline") or (
         f"{at_risk} of {len(out_deps)} dependencies are at risk; tests passing {base['passed']}/{base['total']} "
         f"before and {mig['passed']}/{mig['total']} after migration.")
+    if scan_only:
+        headline = (f"Scan-only ({ecosystem}): {at_risk} of {len(out_deps)} dependencies are at risk. Replacements are "
+                    "proposed by Gemma 4 but not migrated or verified in a sandbox.")
 
     n_calls, n_failed, model, n_cached, models_used = _calls(job_dir)
     fallback_answers = {m: n for m, n in models_used.items() if not m.startswith("gemma")}
@@ -165,17 +175,23 @@ def run(job_dir: Path, target: dict, stage_errors: dict, base_url: str) -> dict:
             limitations.append(f"Gemma's rewrite of {f['path']} was rejected ({f['reason']}); original file kept.")
         elif f["status"] == "reverted":
             limitations.append(f"Rewrite of {f['path']} was {f['reason']}.")
-    if not any(r["tests"] for r in runs):
+    if scan_only:
+        limitations.insert(0, f"{ecosystem} support is scan-only: dependencies, risks, usage and blast radius are "
+                              "analysed and Gemma 4 proposes replacements, but no code is migrated and nothing is "
+                              "executed in the Docker sandbox for this ecosystem yet.")
+    elif not any(r["tests"] for r in runs):
         limitations.append("No test results were collected; compatibility could not be verified by execution.")
-    limitations += [n for n in scan.get("notes", []) if "not parsed" in n or "not analysed" in n]
-    limitations += FIXED_LIMITATIONS
+    limitations += [n for n in scan.get("notes", []) if "not parsed" in n or "not analysed" in n
+                    or "lookup failed" in n or "No lockfile" in n]
+    limitations += [x for x in FIXED_LIMITATIONS if not scan_only or "python:3.12-slim" not in x]
 
     capsule = {
         "schema_version": "1.0",
         "capsule_id": job_dir.name,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "tool": {"name": "DepExit", "version": config.TOOL_VERSION},
-        "target": {**target, "manifests": scan.get("manifests", [])},
+        "target": {**target, "manifests": scan.get("manifests", []), "ecosystem": ecosystem,
+                   "verification": "scan_only" if scan_only else "sandbox"},
         "ai": {"provider": "Google AI Studio (Gemini API)", "model": model or ",".join(gemma.models()),
                "calls": n_calls, "failed_calls": n_failed, "cached_calls": n_cached,
                "models_used": models_used, "fallback_models_used": sorted(fallback_answers),

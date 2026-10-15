@@ -53,6 +53,18 @@ If Gemma is unavailable the pipeline still finishes with deterministic fallbacks
 - **Fallback chain (hard time limits):** every AI call goes to **Gemma 4 first** with 60% of its time budget (`GEMMA_BUDGET_SHARE`). Only if Gemma fails or runs out of time does it fall back to Gemini (`FALLBACK_MODELS`, default `gemini-3.5-flash,gemini-3.1-flash-lite`, same AI Studio keys), then to Groq (`GROQ_API_KEYS`, `GROQ_MODEL` default `openai/gpt-oss-120b`), then to xAI Grok (`XAI_API_KEYS`). Slow calls are abandoned, never waited on. Every answer records the model that produced it: `ai_calls.jsonl`, `replacement.model` per decision, and `capsule.ai.models_used` / `fallback_models_used` plus a limitations line whenever a non-Gemma model answered.
 - **Terms:** [Gemma Terms of Use](https://ai.google.dev/gemma/terms) and the [Gemini API Additional Terms of Service](https://ai.google.dev/gemini-api/terms).
 
+## Ecosystems
+| | Python | JavaScript / npm (scan-only) |
+|---|---|---|
+| Manifests | `requirements*.txt`, `pyproject.toml`, `setup.cfg` | `package.json` + `package-lock.json` |
+| Registry facts | PyPI | npm registry (latest, release dates, deprecation notices, peer deps) |
+| Vulnerabilities | OSV (`PyPI`) | OSV (`npm`) |
+| Usage + blast radius | AST + import graph | `import` / `export from` / `require()` / `import()` / CSS `@import` + relative-import graph |
+| Gemma 4 proposals | ✅ | ✅ (npm package + semver range) |
+| Code migration + Docker A/B tests + PR | ✅ | ❌ not yet — the capsule is marked `verification: scan_only` |
+
+The ecosystem is detected from the clone (Python wins for mixed repositories).
+
 ## Applying the fixes
 DepExit never edits your repository directly. It clones the repo, migrates a **copy**, and proves that copy in Docker.
 To take the result:

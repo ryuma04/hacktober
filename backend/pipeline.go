@@ -159,13 +159,20 @@ func (p *Pipeline) Run(id string) {
 		p.finish(id, "failed", err.Error())
 		return
 	}
+	eco := detectEcosystem(repo)
+	p.store.Update(id, func(j *Job) { j.Ecosystem = eco })
+	if eco == ecoNPM {
+		p.logf(id, "clone", "info", "JavaScript/npm project detected (package.json): running the scan-only pipeline")
+	}
 	job, _ = p.store.Snapshot(id)
 
 	// 6. baseline sandbox in parallel with the analysis stages
 	dockerOK := dockerAvailable(ctx)
 	var baseWG sync.WaitGroup
 	baselineOK := false
-	if dockerOK {
+	if eco == ecoNPM {
+		p.skip(id, "sandbox_baseline", scanOnlyReason)
+	} else if dockerOK {
 		baseWG.Add(1)
 		go func() {
 			defer baseWG.Done()
@@ -193,7 +200,7 @@ func (p *Pipeline) Run(id string) {
 	}
 
 	py := p.cfg.PythonVersion
-	base := map[string]any{"job_dir": jobDir, "repo_dir": repo, "python_version": py}
+	base := map[string]any{"job_dir": jobDir, "repo_dir": repo, "python_version": py, "ecosystem": eco}
 
 	// 2-5. analysis (each later stage needs the previous one's output file)
 	_, scanErr := p.aiStage(ctx, id, "scan", "/v1/scan", base, 8*time.Minute, errs, &mu, func(o map[string]any) map[string]any {
@@ -266,6 +273,10 @@ func (p *Pipeline) analysisStages(ctx context.Context, id string, base map[strin
 		p.skip(id, "materialize", "propose failed")
 		return propErr
 	}
+	if base["ecosystem"] == ecoNPM {
+		p.skip(id, "materialize", scanOnlyReason)
+		return errScanOnly
+	}
 	_, matErr := p.aiStage(ctx, id, "materialize", "/v1/materialize", merge(base, map[string]any{"out_repo_dir": migratedRepo}),
 		15*time.Minute, errs, mu, func(o map[string]any) map[string]any {
 			files, _ := o["files"].([]any)
@@ -295,6 +306,8 @@ func (p *Pipeline) afterAnalysis(ctx context.Context, id, jobDir string, job *Jo
 		runIDs = append(runIDs, "baseline")
 	}
 	switch {
+	case base["ecosystem"] == ecoNPM:
+		p.skip(id, "sandbox_migrated", scanOnlyReason)
 	case !dockerOK:
 		p.skip(id, "sandbox_migrated", "Docker is not available")
 	case matErr != nil || !fileExists(migratedRepo):
@@ -316,7 +329,9 @@ func (p *Pipeline) afterAnalysis(ctx context.Context, id, jobDir string, job *Jo
 	}
 
 	// 8. compare
-	if len(runIDs) > 0 {
+	if base["ecosystem"] == ecoNPM {
+		p.skip(id, "compare", scanOnlyReason)
+	} else if len(runIDs) > 0 {
 		_, _ = p.aiStage(ctx, id, "compare", "/v1/compare", merge(base, map[string]any{"run_ids": runIDs}), 5*time.Minute,
 			errs, mu, func(o map[string]any) map[string]any {
 				fixed, regressed, still := 0, 0, 0

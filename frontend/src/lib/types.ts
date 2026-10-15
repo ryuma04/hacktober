@@ -21,6 +21,7 @@ export interface Job {
   repo_url: string;
   ref: string;
   commit?: string;
+  ecosystem?: "python" | "npm"; // npm analyses are scan-only
   status: JobStatus;
   created_at: string;
   finished_at?: string;
@@ -39,7 +40,7 @@ export type IndicatorCode =
   | "PRIVATE_API_USE" | "MONKEYPATCH" | "DEPRECATED_API_USE" | "YANKED";
 
 export interface Evidence {
-  source: "pypi" | "osv" | "ast" | "manifest" | "sandbox" | "knowledge";
+  source: "pypi" | "npm" | "osv" | "ast" | "manifest" | "sandbox" | "knowledge";
   ref?: string;
   url?: string;
   detail?: string;
@@ -131,6 +132,7 @@ export interface Dependency {
     files_changed: string[];
     applied: boolean;
     not_applied_reason?: string;
+    proposed_only?: boolean; // scan-only ecosystems: the migration is a plan, never applied
     provenance: "ai";
   };
   suggested_tests: {
@@ -207,6 +209,8 @@ export interface Capsule {
     commit: string;
     python_version: string;
     manifests: string[];
+    ecosystem?: "python" | "npm";
+    verification?: "sandbox" | "scan_only";
   };
   ai: {
     provider: "Google AI Studio (Gemini API)";

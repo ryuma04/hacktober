@@ -104,7 +104,7 @@ docker run --rm --name dx-<job>-<run>-test --network none \
 docker volume rm dx-<job>-<run>-venv
 ```
 - Requirement files to install are discovered by the AI scan (`scan.install_files`), Go just passes them; fallback `requirements.txt`.
-- Timeouts: install 300 s, test 300 s (`SANDBOX_TIMEOUT_S`). On timeout: `docker kill`, mark run `timeout`.
+- Timeouts: install 900 s, test 900 s (`SANDBOX_TIMEOUT_S`; heavy ML/video dependencies can take several minutes to download). On timeout: `docker kill`, mark run `timeout`.
 - If install fails, **still** record it — an install failure on Python 3.12 is evidence. Test step is skipped, `result.json.status = "install_failed"`.
 - Windows: pass absolute paths (`filepath.Abs`), Docker Desktop accepts `D:\...`.
 - Image pre-pull at startup (`docker pull python:3.12-slim` in background) and `GET /api/health` reports docker availability.
@@ -119,7 +119,7 @@ PORT=8080
 AI_SERVICE_URL=http://localhost:8001
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 SANDBOX_IMAGE=python:3.12-slim
-SANDBOX_TIMEOUT_S=300
+SANDBOX_TIMEOUT_S=900
 DEFAULT_REPO_URL=https://github.com/rishrek/LinkWatch
 # AI service
 GEMINI_API_KEYS=           # comma-separated Google AI Studio keys; next key used automatically on quota/auth errors

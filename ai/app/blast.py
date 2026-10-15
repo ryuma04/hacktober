@@ -60,13 +60,17 @@ def _conftest_scope(conftest: str, test_files: list[str]) -> list[str]:
     return [t for t in test_files if t.startswith(base) and t != conftest]
 
 
-def compute(repo: Path, usage: dict[str, dict]) -> dict[str, dict]:
-    graph = import_graph(repo)
+def compute(repo: Path, usage: dict[str, dict], graph: dict[str, set[str]] | None = None,
+            is_test=None) -> dict[str, dict]:
+    """`graph` (file -> project files it imports) and `is_test` default to the Python implementations; other
+    ecosystems (npm) pass their own."""
+    graph = import_graph(repo) if graph is None else graph
+    is_test = is_test or pysrc.is_test_file
     reverse: dict[str, set[str]] = {f: set() for f in graph}
     for src, dsts in graph.items():
         for d in dsts:
             reverse.setdefault(d, set()).add(src)
-    test_files = sorted(f for f in graph if pysrc.is_test_file(f) and not f.endswith("conftest.py"))
+    test_files = sorted(f for f in graph if is_test(f) and not f.endswith("conftest.py"))
     out: dict[str, dict] = {}
     for dep, u in usage.items():
         locs = u.get("locations", [])
@@ -95,17 +99,17 @@ def compute(repo: Path, usage: dict[str, dict]) -> dict[str, dict]:
             for t in _conftest_scope(conf, test_files):
                 if t not in via:
                     via[t] = [t] + via[conf]
-        indirect = sorted(f for f in via if f not in direct and not pysrc.is_test_file(f))
+        indirect = sorted(f for f in via if f not in direct and not is_test(f))
         tests = sorted(f for f in via if f in test_files)
 
         nodes = [{"id": f"dep:{dep}", "type": "dependency", "label": dep}]
         edges = []
         for f in sorted(direct):
-            nodes.append({"id": f, "type": "test" if pysrc.is_test_file(f) else "module", "label": f,
+            nodes.append({"id": f, "type": "test" if is_test(f) else "module", "label": f,
                           "impact": "direct", "lines": len(direct[f])})
             edges.append({"from": f, "to": f"dep:{dep}", "kind": "uses"})
         for f in sorted(set(via) - set(direct)):
-            nodes.append({"id": f, "type": "test" if pysrc.is_test_file(f) else "module", "label": f,
+            nodes.append({"id": f, "type": "test" if is_test(f) else "module", "label": f,
                           "impact": "indirect"})
             edges.append({"from": f, "to": via[f][1], "kind": "conftest" if via[f][1].endswith("conftest.py")
                           and f in test_files and via[f][1] not in graph.get(f, set()) else "imports"})
